@@ -10,33 +10,24 @@ import {
     findLeafIndex,
     hasLeaf,
     getLeaves,
+    getIsTreeSynced,
 } from '../services/merkleService.js';
 import { updateRootOnChain } from '../services/contractService.js';
 
 const router = Router();
 
-/**
- * POST /leaves
- * Register a new stealth account leaf in the Merkle tree.
- *
- * Body: {
- *   address: string,  // 0x-prefixed identity address (computeAddress(spendPub))
- *   leaf:    string,  // 0x-prefixed k = poseidon(spendPriv)  ← actual tree leaf
- * }
- *
- * The `leaf` (k) is the secret commitment only the account owner can compute.
- * The `indexCommitment` = poseidon(poseidon(index,0), address) is the public
- * identifier used as the AA factory CREATE2 salt — it is NOT what goes into
- * the Merkle tree.
- *
- * Atomic flow:
- *   1. Compute indexCommitment from (index, address) — for the factory.
- *   2. Insert `leaf` (k) into the sparse tree — O(depth), no rebuild.
- *   3. Push new root on-chain. If that fails, rollback the local insert.
- */
 router.post('/', async (req, res) => {
     const { address, leaf } = req.body;
 
+    // Reject if the server tree is out of sync with on-chain to avoid inserting
+    // locally and then generating a ZK proof that will always fail verification.
+    if (!getIsTreeSynced()) {
+        return res.status(409).json({
+            error:
+                'Server tree is out of sync with the on-chain root. ' +
+                'Delete leaves.json and restart the server to re-sync before inserting new leaves.',
+        });
+    }
     if (!address) {
         return res.status(400).json({
             error: "Missing 'address' field. Must be a 0x-prefixed hex address.",
@@ -58,11 +49,9 @@ router.post('/', async (req, res) => {
     // Prevent duplicating the leaf, but return success (e.g. for wallet imports)
     if (hasLeaf(leaf)) {
         const existingIndex = findLeafIndex(leaf);
-        const existingIndexCommitment = computeIndexCommitmentForIndex(existingIndex, address);
         return res.json({
             success: true,
             index: existingIndex,
-            indexCommitment: existingIndexCommitment,
             leaf,
             newRoot: getCurrentRootHex(), // root didn't change
             txHash: null,
@@ -71,7 +60,7 @@ router.post('/', async (req, res) => {
     }
 
     // indexCommitment is the public AA salt — computed from index + address
-    const { index, indexCommitmentHex } = computeIndexCommitment(address);
+    const { index } = computeIndexCommitment(address);
 
     const oldRootHex = getCurrentRootHex();
     const oldLeafHex = '0x' + '0'.repeat(64); // inserting into an empty slot
@@ -105,11 +94,44 @@ router.post('/', async (req, res) => {
     return res.json({
         success: true,
         index,
-        indexCommitment: indexCommitmentHex,  // factory CREATE2 salt
         leaf,                                  // k stored in the tree
         newRoot,
         txHash,
         totalLeaves: getLeaves().length,
+    });
+});
+
+router.get('/find/:leafKey', (req, res) => {
+    const { leafKey } = req.params;
+    const { address } = req.query;
+
+    console.log("Leafkey", leafKey);
+    console.log("Address", address);
+    if (!leafKey) {
+        return res.status(400).json({ error: "Missing leafKey path parameter." });
+    }
+
+    if (!hasLeaf(leafKey)) {
+        return res.json({ found: false });
+    }
+
+    const index = findLeafIndex(leafKey);
+
+    // If address is provided, recompute indexCommitment; otherwise omit it.
+    let indexCommitment = null;
+    if (address) {
+        try {
+            indexCommitment = computeIndexCommitmentForIndex(index, address);
+        } catch {
+            return res.status(400).json({ error: 'Invalid address format.' });
+        }
+    }
+
+    return res.json({
+        found: true,
+        index,
+        indexCommitment,
+        newRoot: getCurrentRootHex(),
     });
 });
 

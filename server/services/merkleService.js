@@ -34,6 +34,14 @@ let nextIndex = 0;
 /** The live sparse tree */
 let tree;
 
+/**
+ * True when the server's local tree root is confirmed to match the on-chain
+ * root. Set to false when a mismatch is detected at startup. Leaf insertions
+ * MUST be rejected while this is false to avoid generating ZK proofs that
+ * will always fail verification.
+ */
+let isTreeSynced = true;
+
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
 function loadStore() {
@@ -195,12 +203,15 @@ export async function initTree() {
                 }
 
             } else if (currentOnchainRoot !== calculatedRoot) {
+                isTreeSynced = false;
                 console.log(
                     `[🚨] ROOT MISMATCH! Server: ${calculatedRoot} | On-chain: ${currentOnchainRoot}`,
                 );
                 console.log(`[⚠️] Cannot auto-sync — ZK proofs are required for each update.`);
-                console.log(`[⚠️] If this is a fresh server with stale leaves.json, delete leaves.json and restart.`);
+                console.log(`[⚠️] Leaf insertions are BLOCKED until the tree is re-synced.`);
+                console.log(`[⚠️] Delete leaves.json and restart the server to reset.`);
             } else {
+                isTreeSynced = true;
                 console.log(`[✅] On-chain root already in sync: ${currentOnchainRoot}`);
             }
         } catch (err) {
@@ -209,18 +220,7 @@ export async function initTree() {
     }
 }
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
 
-/** Returns the hex commitment of the most recently inserted leaf, or zero hash. */
-function getLastLeafHex() {
-    if (leafMap.size === 0) return '0x' + '0'.repeat(64);
-    // nextIndex - 1 is the last *assigned* index (it may have been deleted)
-    // Walk backwards to find the most recent non-deleted leaf
-    for (let i = nextIndex - 1; i >= 0; i--) {
-        if (leafMap.has(i)) return leafMap.get(i);
-    }
-    return '0x' + '0'.repeat(64);
-}
 
 // ─── Commitment computation ───────────────────────────────────────────────────
 
@@ -250,8 +250,8 @@ export function computeIndexCommitmentForIndex(index, address) {
  */
 export function computeIndexCommitment(address) {
     const index = nextIndex; // next slot (may be > leafMap.size if deletions happened)
-    const indexCommitmentHex = computeIndexCommitmentForIndex(index, address);
-    return { index, indexCommitmentHex };
+
+    return { index };
 }
 
 // ─── Leaf write operations ────────────────────────────────────────────────────
@@ -377,6 +377,11 @@ export function getNextIndex() {
 
 export function getCurrentRootHex() {
     return rootToHex(tree.root);
+}
+
+/** Returns true when the server tree is confirmed in sync with the on-chain root. */
+export function getIsTreeSynced() {
+    return isTreeSynced;
 }
 
 // ─── Proof generation ─────────────────────────────────────────────────────────

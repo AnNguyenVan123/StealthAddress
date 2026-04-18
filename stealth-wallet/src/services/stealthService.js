@@ -7,10 +7,9 @@ import { announcerAbi } from "../abi/announcerAbi";
 const RPC_URL = import.meta.env.VITE_RPC_URL;
 const FACTORY_ADDRESS = import.meta.env.VITE_FACTORY_ADDRESS;
 const ANNOUNCER_ADDRESS = import.meta.env.VITE_ANNOUNCER_ADDRESS;
-
+const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 /**
- * Resolve recipient's abstract account address from their already-published
- * indexCommitment (no leaf publication — the leaf was published at account creation).
+ * Resolve recipient's abstract account from indexCommitment.
  *
  * @param {string} recipientIndexCommitment  - 0x-prefixed hex, shared as part of the recipient's meta-address
  * @returns {{ abstractAccount: string }}
@@ -23,14 +22,24 @@ export async function getRecipientAbstractAccount(recipientIndexCommitment) {
 }
 
 /**
- * Builds announcer metadata
+ * Builds announcer metadata.
+ * Format:
+ * [1-byte version][1-byte viewTag][32-byte sharedSecretHash][utf8 note...]
  */
-export function buildAnnouncerMetadata(viewTag) {
+export function buildAnnouncerMetadata(viewTag, sharedSecretHash) {
+    if (!sharedSecretHash) {
+        throw new Error("Missing sharedSecretHash for metadata");
+    }
+    const hashBytes = ethers.getBytes(sharedSecretHash);
+    if (hashBytes.length !== 32) {
+        throw new Error("sharedSecretHash must be 32 bytes");
+    }
     const descBytes = ethers.toUtf8Bytes("ETH payment");
-    const metaBytes = new Uint8Array(2 + descBytes.length);
+    const metaBytes = new Uint8Array(34 + descBytes.length);
     metaBytes[0] = 0x01;
     metaBytes[1] = viewTag;
-    metaBytes.set(descBytes, 2);
+    metaBytes.set(hashBytes, 2);
+    metaBytes.set(descBytes, 34);
     return ethers.hexlify(metaBytes);
 }
 
@@ -53,7 +62,7 @@ export async function callSpendZkProofApi({
     amountEther,
     senderIndexCommitment,
     spendPriv,          // sender's spending private key → circuit private input x
-    senderStealthEOA,   // sender's ephemeral stealth EOA → circuit private input stealthEOA
+    senderSharedSecretHash, // circuit private input #2
     ephemeralPub,
     metadata,
     factoryAddress,
@@ -69,7 +78,7 @@ export async function callSpendZkProofApi({
             valueString: ethers.parseEther(amountEther).toString(),
             senderIndexCommitment,
             spendPriv,
-            senderStealthEOA,
+            senderSharedSecretHash,
             factoryAddress,
             announcerAddress,
             schemeId: 1,
@@ -93,12 +102,23 @@ export async function callSpendZkProofApi({
  * Leaf publication no longer happens here. Both the sender's and recipient's leaves
  * were already published at account creation time.
  *
- * @param {object} sender    - { address, stealthEOA, indexCommitment }
+ * @param {object} sender    - { address, sharedSecretHash, indexCommitment }
  * @param {object} recipient - { scanPub, spendPub, indexHash } ← indexHash is part of the recipient's meta-address
  * @param {string} amountEther
  * @param {function} onProgress
  */
 export async function executeStealthTransfer(sender, recipient, amountEther, onProgress = () => { }) {
+    if (
+        !sender?.address ||
+        !sender?.indexCommitment ||
+        !sender?.spendPriv ||
+        !sender?.sharedSecretHash
+    ) {
+        throw new Error(
+            "Missing sender fields for spend proof (address/indexCommitment/spendPriv/proofInput). Please re-scan wallets and try again."
+        );
+    }
+
     onProgress("Generating recipient stealth address...");
     const stealth = generateStealthAddress({
         scanPub: recipient.scanPub,
@@ -106,14 +126,14 @@ export async function executeStealthTransfer(sender, recipient, amountEther, onP
     });
 
     onProgress("Computing dynamic index commitment for this payment...");
-    const indexCommitment = await computeIndexCommitment(recipient.indexHash, stealth.address);
+    const indexCommitment = await computeIndexCommitment(recipient.indexHash, stealth.sharedSecretHash);
 
     onProgress("Resolving recipient abstract account...");
     const { abstractAccount: recipientAbstractAccount } = await getRecipientAbstractAccount(
         indexCommitment
     );
 
-    const metadata = buildAnnouncerMetadata(stealth.viewTag);
+    const metadata = buildAnnouncerMetadata(stealth.viewTag, stealth.sharedSecretHash);
 
     onProgress("Submitting to relayer to generate ZK Proof and execute transfer...");
     const txHash = await callSpendZkProofApi({
@@ -123,7 +143,7 @@ export async function executeStealthTransfer(sender, recipient, amountEther, onP
         amountEther,
         senderIndexCommitment: sender.indexCommitment,
         spendPriv: sender.spendPriv,           // private ZK circuit input
-        senderStealthEOA: sender.stealthEOA,   // private ZK circuit input
+        senderSharedSecretHash: sender.sharedSecretHash, // private ZK circuit input #2
         ephemeralPub: stealth.ephemeralPub,
         metadata,
         factoryAddress: FACTORY_ADDRESS,
@@ -171,7 +191,7 @@ export async function sendStealthPayment(recipient, amountEther, onProgress = ()
 
     // Step 2: Resolve recipient's AA from dynamic indexCommitment
     onProgress("Resolving recipient abstract account...");
-    const indexCommitment = await computeIndexCommitment(recipient.indexHash, stealthEOA);
+    const indexCommitment = await computeIndexCommitment(recipient.indexHash, stealth.sharedSecretHash);
     const factory = new ethers.Contract(FACTORY_ADDRESS, stealthAccountFactoryAbi, signer);
     const abstractAccountAddress = await factory.getFunction("getAddress")(indexCommitment);
 
@@ -187,7 +207,7 @@ export async function sendStealthPayment(recipient, amountEther, onProgress = ()
     // Announced address is the ECDH-derived stealthEOA so the recipient's scanner can detect it.
     onProgress("Announcing on-chain...");
     const announcer = new ethers.Contract(ANNOUNCER_ADDRESS, announcerAbi, signer);
-    const metadata = buildAnnouncerMetadata(stealth.viewTag);
+    const metadata = buildAnnouncerMetadata(stealth.viewTag, stealth.sharedSecretHash);
     const announceTx = await announcer.announce(1, stealthEOA, stealth.ephemeralPub, metadata);
     await announceTx.wait();
 

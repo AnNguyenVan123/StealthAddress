@@ -8,16 +8,16 @@ async function generate() {
 
     // 1. Định nghĩa các Private Inputs (Giả định)
     const x = 123456789n;                // Spending private key
-    const stealthEOA = 987654321n;       // Stealth EOA address
+    const sharedSecretHash = 987654321n;  // Hash of shared secret
     const pathIndices = 0n;              // Index trong Merkle Tree (chọn 0 cho dễ test)
     const levels = 20;
 
     // 2. Tính k = Poseidon(x)
     const k = poseidon([x]);
 
-    // 3. Tính indexCommitment = Poseidon(Poseidon(pathIndices, 0), stealthEOA)
+    // 3. Tính indexCommitment = Poseidon(Poseidon(pathIndices, 0), sharedSecretHash)
     const indexHash = poseidon([pathIndices, 0n]);
-    const indexCommitment = poseidon([indexHash, stealthEOA]);
+    const indexCommitment = poseidon([indexHash, sharedSecretHash]);
 
     // 4. Giả lập Merkle Proof và tính Root
     const merkleProof = [];
@@ -41,7 +41,7 @@ async function generate() {
         root: F.toString(root),
         indexCommitment: F.toString(indexCommitment),
         x: x.toString(),
-        stealthEOA: stealthEOA.toString(),
+        sharedSecretHash: sharedSecretHash.toString(),
         merkleProof: merkleProof.map(m => m.toString()),
         pathIndices: pathIndices.toString()
     };

@@ -49,8 +49,8 @@ template StealthAccountZK(levels) {
     signal input indexCommitment;
 
     // Private Inputs (Only known to the client)
-    signal input x;            // spending private key
-    signal input stealthEOA;   // stealth EOA address
+    signal input x;                 // spending private key
+    signal input sharedSecretHash;  // hash(sharedSecret)
     signal input merkleProof[levels];
     signal input pathIndices;  // the index in the tree
 
@@ -60,16 +60,16 @@ template StealthAccountZK(levels) {
     signal k;
     k <== hash_x.out;
 
-    // 2. Verify that index_commitment = hash(hash(index) + EOA)
+    // 2. Verify that index_commitment = hash(indexHash, sharedSecretHash)
     // First, hash(index)  (Poseidon of [index, 0] based on our zkIntegration logic)
     component index_hash = Poseidon(2);
     index_hash.inputs[0] <== pathIndices;
     index_hash.inputs[1] <== 0;
 
-    // Then hash(indexHash + EOA)
+    // Then hash(indexHash, sharedSecretHash)
     component commitment_hash = Poseidon(2);
     commitment_hash.inputs[0] <== index_hash.out;
-    commitment_hash.inputs[1] <== stealthEOA;
+    commitment_hash.inputs[1] <== sharedSecretHash;
 
     // Ensure the required indexCommitment matches the computed one
     indexCommitment === commitment_hash.out;

@@ -56,6 +56,7 @@ export async function publishAccountLeaf(spendPriv, spendPub) {
 
     // k = poseidon(spendPriv) — matches the circuit: k <== hash_x.out where x = spendPriv
     const kField = pos([BigInt(spendPriv)]);
+
     const k = "0x" + F.toObject(kField).toString(16).padStart(64, '0');
 
     // identity address = the EOA address of the spend public key
@@ -71,6 +72,25 @@ export async function publishAccountLeaf(spendPriv, spendPub) {
     }
     // Returns { success, index, indexCommitment, leaf, newRoot, txHash, totalLeaves }
     return response.json();
+}
+
+/**
+ * Check whether a leaf (k = poseidon(spendPriv)) already exists in the server
+ * tree. If it does, returns its stored index and recomputed indexCommitment.
+ *
+ * @param {string} kHex      0x-prefixed k value
+ * @param {string} address   Identity address (computeAddress(spendPub)) — needed
+ *                           for the server to recompute indexCommitment.
+ * @returns {Promise<{ found: boolean, index?: number, indexCommitment?: string }>}
+ */
+export async function lookupLeaf(kHex, address) {
+    const url = new URL(`${SERVER_URL}/leaves/find/${encodeURIComponent(kHex)}`);
+    url.searchParams.set('address', address);
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+        throw new Error((await response.json()).error || response.statusText);
+    }
+    return response.json(); // { found, index?, indexCommitment?, newRoot? }
 }
 
 /**
@@ -119,37 +139,19 @@ export async function computeIndexHash(index) {
 }
 
 /**
- * Computes indexCommitment client-side (mirrors server formula).
- * indexCommitment = poseidon(indexHash, address)
+ * Computes indexCommitment client-side.
+ * indexCommitment = poseidon(indexHash, sharedSecret)
  *
  * @param {string} indexHashHex - 0x-prefixed hex string of the indexHash
- * @param {string} address - Stealth EOA address (0x-prefixed hex)
+ * @param {string} sharedSecretHex - 0x-prefixed hex shared secret
  * @returns {Promise<string>} indexCommitment as 0x-prefixed hex
  */
-export async function computeIndexCommitment(indexHashHex, address) {
+export async function computeIndexCommitment(indexHashHex, sharedSecretHex) {
     const pos = await getPoseidon();
     const F = pos.F;
-    const commitmentField = pos([BigInt(indexHashHex), BigInt(address)]);
+    const commitmentField = pos([BigInt(indexHashHex), BigInt(sharedSecretHex)]);
     const commitmentBigInt = F.toObject(commitmentField);
     return "0x" + commitmentBigInt.toString(16).padStart(64, '0');
-}
-
-/**
- * Deploys the un-initialized stealth account using the CREATE2 factory.
- */
-export async function deployZkStealthAccount(signer, factoryAddress, indexCommitment) {
-    const factoryAbi = [
-        "function deployFor(bytes32 indexCommitment) external returns (address)",
-        "function getAddress(bytes32 indexCommitment) external view returns (address)"
-    ];
-    const factory = new ethers.Contract(factoryAddress, factoryAbi, signer);
-    
-    console.log("Deploying contract for Index Commitment: " + indexCommitment);
-    const tx = await factory.deployFor(indexCommitment);
-    await tx.wait();
-    
-    const accountAddress = await factory.getAddress(indexCommitment);
-    return accountAddress;
 }
 
 /**
@@ -157,9 +159,9 @@ export async function deployZkStealthAccount(signer, factoryAddress, indexCommit
  * to the generic off-chain relayer to execute as a UserOperation, paying gas.
  */
 export async function executeFromZkStealth(
-    stealthAccountAddress, 
+    stealthAccountAddress,
     recipientLeafHex,
-    recipientAbstractAccount, 
+    recipientAbstractAccount,
     amountEther,
     auth,
     factoryAddress,
@@ -175,7 +177,7 @@ export async function executeFromZkStealth(
     };
 
     console.log("Delegating execution to Relayer (UserOperation API)...");
-    
+
     const response = await fetch(`${SERVER_URL}/relay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -197,7 +199,7 @@ export async function executeFromZkStealth(
         const err = await response.json();
         throw new Error(err.error || response.statusText);
     }
-    
+
     const result = await response.json();
     return { hash: result.txHash };
 }

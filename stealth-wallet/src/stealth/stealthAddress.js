@@ -11,6 +11,7 @@ const n =
  * Returns:
  *  - address:      The stealth EOA (ECDH-derived), used as the Abstract Account owner
  *  - ephemeralPub: Sender's ephemeral public key R (published on-chain)
+ *  - sharedSecretHash: keccak256(sharedSecret) to publish in announcement metadata
  *  - viewTag:      1-byte view tag = first byte of hash(sharedSecret).
  *                  Allows the recipient's scanner to skip 255/256 announcements
  *                  without doing full address derivation (per ERC-5564 spec).
@@ -55,6 +56,7 @@ export function generateStealthAddress({
     return {
         address:      stealthAddress,   // stealth EOA (owner of Abstract Account)
         ephemeralPub: R,                // published in Announcement event
+        sharedSecretHash: sharedHash,   // published hash for recipient-side match check
         viewTag,                        // 1-byte shortcut for fast scanning
     }
 }

@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { createMetaAddress } from "../stealth/crypto";
 import { scanStealthPayments } from "../scanner/scannerEngine";
 import { executeStealthTransfer } from "../services/stealthService";
-import { publishAccountLeaf, computeIndexHash } from "../stealth/zkIntegration";
+import { publishAccountLeaf, lookupLeaf, computeIndexHash, getPoseidon } from "../stealth/zkIntegration";
 
 /**
  * useStealthWallet
@@ -22,17 +22,19 @@ export function useStealthWallet(meta, setMeta) {
     /** Creates a fresh stealth meta-address key pair and publishes its account leaf. */
     async function createWallet() {
         const wallet = createMetaAddress();
-        const { index, indexCommitment } = await publishAccountLeaf(
+        const { index } = await publishAccountLeaf(
             wallet.spendPriv,
             wallet.spendPub
         );
+        console.log("Spend private:", wallet.spendPriv);
+        console.log("Scan private:", wallet.scanPriv);
         const indexHash = await computeIndexHash(index);
-        const full = { ...wallet, index, indexHash, indexCommitment };
+        const full = { ...wallet, index, indexHash };
         setMeta(full);
         return full;
     }
 
-    /** Imports an existing wallet from scan + spend private keys and re-publishes its leaf. */
+    /** Imports an existing wallet from scan + spend private keys. */
     async function importWallet() {
         if (!scanPriv || !spendPriv) throw new Error("Please enter both Private Keys");
         const scanKey = new ethers.SigningKey(scanPriv);
@@ -43,10 +45,27 @@ export function useStealthWallet(meta, setMeta) {
             scanPub: scanKey.publicKey,
             spendPub: spendKey.publicKey,
         };
-        const { index, indexCommitment } = await publishAccountLeaf(
-            wallet.spendPriv,
-            wallet.spendPub
-        );
+
+        // Compute k = poseidon(spendPriv) locally to check for an existing entry.
+        const pos = await getPoseidon();
+        const F = pos.F;
+        const kField = pos([BigInt(spendPriv)]);
+        const k = "0x" + F.toObject(kField).toString(16).padStart(64, "0");
+        const identityAddress = ethers.computeAddress(wallet.spendPub);
+
+        // If the leaf is already in the tree, reuse its stored index.
+        const existing = await lookupLeaf(k, identityAddress);
+        let index, indexCommitment;
+        if (existing.found) {
+            index = existing.index;
+            indexCommitment = existing.indexCommitment;
+        } else {
+            ({ index, indexCommitment } = await publishAccountLeaf(
+                wallet.spendPriv,
+                wallet.spendPub
+            ));
+        }
+
         const indexHash = await computeIndexHash(index);
         const full = { ...wallet, index, indexHash, indexCommitment };
         setMeta(full);
@@ -98,10 +117,14 @@ export function useStealthWallet(meta, setMeta) {
         setSendProgress("Starting...");
 
         try {
+            const proofInput2 = w.sharedSecretHash || w.stealthEOA;
+            if (!proofInput2) {
+                throw new Error("Missing sender proof input. Please scan stealth transfers again before sending.");
+            }
             const txHash = await executeStealthTransfer(
                 {
                     address: w.address,
-                    stealthEOA: w.stealthEOA,
+                    sharedSecretHash: proofInput2, // circuit input #2
                     indexCommitment: w.indexCommitment,
                     spendPriv: meta.spendPriv,      // private ZK circuit input x
                 },

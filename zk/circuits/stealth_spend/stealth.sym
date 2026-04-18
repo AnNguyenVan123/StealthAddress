@@ -1,7 +1,7 @@
 1,1,143,main.root
 2,2,143,main.indexCommitment
 3,3,143,main.x
-4,4,143,main.stealthEOA
+4,4,143,main.sharedSecretHash
 5,5,143,main.merkleProof[0]
 6,6,143,main.merkleProof[1]
 7,7,143,main.merkleProof[2]

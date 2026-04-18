@@ -53,7 +53,7 @@ export async function generateUpdateProof(oldRootHex, newRootHex, newLeafHex, le
 //  * @param {string} senderStealthEOA      - the ephemeral stealth EOA the AA was deployed for
 //  * @returns {{ auth: object, indexCommitment: string }}
 //  */
-export async function generateSpendProof(senderIndexCommitment, spendPrivHex, senderStealthEOA) {
+export async function generateSpendProof(senderIndexCommitment, spendPrivHex, senderSharedSecretHash) {
     // The leaf stored in the tree is k = poseidon(spendPriv)
     const F = getF();
     const poseidon = getPoseidon();
@@ -86,7 +86,7 @@ export async function generateSpendProof(senderIndexCommitment, spendPrivHex, se
         indexCommitment: BigInt(senderIndexCommitment).toString(),
         // Private inputs
         x: BigInt(spendPrivHex).toString(),             // spendPriv → k = poseidon(x) in circuit
-        stealthEOA: BigInt(senderStealthEOA).toString(), // matches the stealthEOA used to derive indexCommitment
+        sharedSecretHash: BigInt(senderSharedSecretHash).toString(), // matches indexCommitment = H(indexHash, sharedSecretHash)
         merkleProof: proofRes.siblings.map((s) => BigInt(s[0]).toString()),
         pathIndices: pathIndicesFlags.toString(),
     };

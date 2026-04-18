@@ -12,15 +12,14 @@ const router = Router();
  *
  * End-to-end stealth transfer flow:
  *   1. Generate a Groth16 ZK proof for the sender's leaf.
- *   2. Deploy the recipient abstract account (if not yet deployed).
- *   3. Verify the sender wallet has sufficient balance.
- *   4. Build calldata for executeStealthTransfer().
- *   5. Encode the proof as UserOperation signature.
- *   6. Submit via ERC-4337 handleOps.
+ *   2. Verify the sender wallet has sufficient balance.
+ *   3. Build calldata for executeStealthTransfer().
+ *   4. Encode the proof as UserOperation signature.
+ *   5. Submit via ERC-4337 handleOps.
  *
  * Body:
  *   senderStealthAddress, recipientIndexCommitment, recipientAbstractAccount,
- *   valueString, senderIndexCommitment, factoryAddress, announcerAddress,
+ *   valueString, senderIndexCommitment, senderSharedSecretHash, factoryAddress, announcerAddress,
  *   schemeId, ephemeralPub, metadata
  */
 router.post('/', async (req, res) => {
@@ -30,8 +29,8 @@ router.post('/', async (req, res) => {
         recipientAbstractAccount,
         valueString,
         senderIndexCommitment,
+        senderSharedSecretHash,
         spendPriv,           // sender's spending private key (private ZK circuit input x)
-        senderStealthEOA,    // (private ZK circuit input: stealthEOA)
         factoryAddress,
         announcerAddress,
         schemeId,
@@ -46,11 +45,13 @@ router.post('/', async (req, res) => {
         !recipientAbstractAccount ||
         !valueString ||
         !senderIndexCommitment ||
+        !senderSharedSecretHash ||
         !spendPriv ||
-        !senderStealthEOA
+        !factoryAddress ||
+        !announcerAddress
     ) {
         return res.status(400).json({
-            error: 'Missing required fields: senderStealthAddress, recipientIndexCommitment, recipientAbstractAccount, valueString, senderIndexCommitment, spendPriv, senderStealthEOA',
+            error: 'Missing required fields: senderStealthAddress, recipientIndexCommitment, recipientAbstractAccount, valueString, senderIndexCommitment, senderSharedSecretHash, spendPriv, factoryAddress, announcerAddress',
         });
     }
 
@@ -66,7 +67,7 @@ router.post('/', async (req, res) => {
         ({ auth, indexCommitment } = await generateSpendProof(
             senderIndexCommitment,
             spendPriv,
-            senderStealthEOA
+            senderSharedSecretHash
         ));
     } catch (err) {
         console.error('[❌] ZK proof generation failed:', err);
@@ -77,16 +78,7 @@ router.post('/', async (req, res) => {
         const factory = new ethers.Contract(factoryAddress, factoryABI, signer);
         const entryPoint = new ethers.Contract(ENTRY_POINT, entryPointABI, signer);
 
-        // ── 3. Deploy recipient AA ───────────────────────────────────────────
-        try {
-            console.log('[Step 2] Deploying recipient AA…');
-            const deployTx = await factory.deployFor(recipientIndexCommitment);
-            await deployTx.wait();
-        } catch (err) {
-            console.warn('[⚠️] Deploy skipped (may already exist):', err.message);
-        }
-
-        // ── 4. Balance check ────────────────────────────────────────────────
+        // ── 3. Balance check ────────────────────────────────────────────────
         const transferValue = BigInt(valueString);
         const aaBalance = await provider.getBalance(senderStealthAddress);
 
@@ -98,10 +90,10 @@ router.post('/', async (req, res) => {
             });
         }
 
-        // ── 5. Build calldata ────────────────────────────────────────────────
+        // ── 4. Build calldata ────────────────────────────────────────────────
         let callData;
         try {
-            console.log('[Step 3] Building calldata…');
+            console.log('[Step 2] Building calldata…');
             const stealthInterface = new ethers.Interface(stealthABI);
             callData = stealthInterface.encodeFunctionData('executeStealthTransfer', [
                 announcerAddress,
@@ -116,7 +108,7 @@ router.post('/', async (req, res) => {
             throw new Error('CALLDATA_BUILD_FAILED: ' + err.message);
         }
 
-        // ── 6. Encode signature ──────────────────────────────────────────────
+        // ── 5. Encode signature ──────────────────────────────────────────────
         const abiCoder = ethers.AbiCoder.defaultAbiCoder();
         const signature = encodeProofSignature(auth, senderIndexCommitment, abiCoder);
 
@@ -131,18 +123,29 @@ router.post('/', async (req, res) => {
             console.error('[❌] Local ABI decode FAILED:', e);
         }
 
-        // ── 7. Get nonce & gas ───────────────────────────────────────────────
+        // ── 6. Get nonce & gas ───────────────────────────────────────────────
+        let initCode = '0x';
+        const codeAtAddress = await provider.getCode(senderStealthAddress);
+        if (codeAtAddress === '0x') {
+            const factoryInterface = new ethers.Interface(factoryABI);
+            // Ensure indexCommitment is bytes32 by converting to BigInt then to hex representation
+            const indexHex = '0x' + BigInt(senderIndexCommitment).toString(16).padStart(64, '0');
+            const deployCallData = factoryInterface.encodeFunctionData('deployFor', [indexHex]);
+            initCode = ethers.concat([factoryAddress, deployCallData]);
+            console.log('[Step 2b] Sender AA not deployed. Added initCode.');
+        }
+
         const nonce = await entryPoint.getNonce(senderStealthAddress, 0);
         const feeData = await provider.getFeeData();
         const maxFeePerGas = feeData.maxFeePerGas ?? ethers.parseUnits('20', 'gwei');
         const maxPriorityFeePerGas =
             feeData.maxPriorityFeePerGas ?? ethers.parseUnits('1', 'gwei');
 
-        // ── 8. Build UserOperation ───────────────────────────────────────────
+        // ── 7. Build UserOperation ───────────────────────────────────────────
         const userOp = {
             sender: senderStealthAddress,
             nonce: nonce.toString(),
-            initCode: '0x',
+            initCode: initCode,
             callData,
             callGasLimit: 500_000,
             verificationGasLimit: 2_000_000,
@@ -155,7 +158,7 @@ router.post('/', async (req, res) => {
 
         console.log('[UserOp]', JSON.stringify(userOp, null, 2));
 
-        // ── 9. On-chain debug (optional) ─────────────────────────────────────
+        // ── 8. On-chain debug (optional) ─────────────────────────────────────
         try {
             const codeAtAddress = await provider.getCode(senderStealthAddress);
             if (codeAtAddress === '0x') {
@@ -179,10 +182,10 @@ router.post('/', async (req, res) => {
             console.warn('[⚠️] Debug verification skipped:', err.message);
         }
 
-        // ── 10. Submit UserOperation ─────────────────────────────────────────
+        // ── 9. Submit UserOperation ─────────────────────────────────────────
         let tx;
         try {
-            console.log('[Step 4] Sending handleOps…');
+            console.log('[Step 3] Sending handleOps…');
             tx = await entryPoint.handleOps([userOp], await signer.getAddress());
         } catch (err) {
             throw new Error('HANDLE_OPS_FAILED: ' + err.message);

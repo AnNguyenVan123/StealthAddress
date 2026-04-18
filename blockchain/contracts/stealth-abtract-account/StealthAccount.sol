@@ -64,49 +64,15 @@ contract StealthAccount {
     IOffchainMerkleTreeManager public treeManager;
     IPoseidon public poseidonHasher;
     IVerifier public verifier;
+    // TODO: wire the real ERC-4337 EntryPoint address per network.
+    address public constant ENTRY_POINT = address(0);
     // ===== EVENTS =====
     event DebugProof(bool success);
     event DebugSignals(uint256 s0, uint256 s1);
-    // ─── Recovery State ──────────────────────────────────────────────────────
-
-    /// @notice Merkle root of guardian commitments (keccak256(guardianAddr, secret))
-    bytes32 public guardianRoot;
-
-    /// @notice Minimum number of guardian approvals required
-    uint256 public guardianThreshold;
-
-    /// @notice Seconds to wait after reaching threshold before executeRecovery() works
-    uint256 public recoveryDelay;
-
-    /// @notice Proposed new indexCommitment for the active recovery round
-    bytes32 public pendingIndexCommitment;
-
-    /// @notice Timestamp when the threshold was reached (0 = not reached yet)
-    uint256 public thresholdReachedAt;
-
-    /// @notice Number of approvals in the current round
-    uint256 public approvalCount;
-
-    /// @notice Incremented each round to invalidate stale approvals
-    uint256 public recoveryNonce;
-
-    /// @notice commitment => nonce at time of approval  (prevents double-voting)
-    mapping(bytes32 => uint256) public approvedAt;
 
     // ─── Events ──────────────────────────────────────────────────────────────
 
     event Executed(address indexed to, uint256 value, bytes data);
-    event RecoverySetup(bytes32 guardianRoot, uint256 threshold, uint256 delay);
-    event RecoveryApproved(
-        bytes32 indexed commitment,
-        bytes32 pendingIndexCommitment,
-        uint256 approvalCount
-    );
-    event RecoveryExecuted(
-        bytes32 indexed oldCommitment,
-        bytes32 indexed newCommitment
-    );
-    event RecoveryCancelled(uint256 nonce);
 
     // ─── Errors ──────────────────────────────────────────────────────────────
 
@@ -128,35 +94,19 @@ contract StealthAccount {
         uint256[2] c;
     }
 
-    /**
-     * @notice Simulates ZK proof verification on-chain over public signals:
-     *         0. currentRoot
-     *         1. indexCommitment
-     */
-
-    // Production
-
-    // function _verifyZKP(ZKPAuth calldata auth) internal view {
-    //     bytes32 currentRoot = treeManager.root();
-    //     require(
-    //         currentRoot != bytes32(0),
-    //         "StealthAccount: Tree root is empty"
-    //     );
-
-    //     uint256[2] memory publicSignals;
-    //     publicSignals[0] = uint256(currentRoot);
-    //     publicSignals[1] = uint256(indexCommitment);
-
-    //     // --- ZK VERIFIER INTEGRATION ---
-    //     require(
-    //         address(verifier) != address(0),
-    //         "StealthAccount: Verifier not set"
-    //     );
-    //     require(
-    //         verifier.verifyProof(auth.a, auth.b, auth.c, publicSignals),
-    //         "StealthAccount: Invalid ZK spend proof"
-    //     );
-    // }
+    struct UserOperation {
+        address sender;
+        uint256 nonce;
+        bytes initCode;
+        bytes callData;
+        uint256 callGasLimit;
+        uint256 verificationGasLimit;
+        uint256 preVerificationGas;
+        uint256 maxFeePerGas;
+        uint256 maxPriorityFeePerGas;
+        bytes paymasterAndData;
+        bytes signature;
+    }
 
     function _verifyZKP(
         ZKPAuth calldata auth
@@ -236,28 +186,6 @@ contract StealthAccount {
 
     receive() external payable {}
 
-    // ═══════════════════════════════════════════════════════════════════════
-    //  CORE: execute
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * @notice Execute an arbitrary call from this account.
-     * @dev Only callable by the owner EOA.
-     */
-    // function execute(
-    //     address to,
-    //     uint256 value,
-    //     bytes calldata data,
-    //     ZKPAuth calldata auth
-    // ) external returns (bytes memory) {
-    //     _verifyZKP(auth);
-
-    //     (bool ok, bytes memory result) = to.call{value: value}(data);
-    //     if (!ok) revert ExecutionFailed();
-
-    //     emit Executed(to, value, data);
-    //     return result;
-    // }
     event DebugZKP(bool ok, string reason, uint256 root, uint256 index);
 
     event DebugExecuteStep(string step);
@@ -361,214 +289,7 @@ contract StealthAccount {
         // ===== 4. RETURN =====
         return result;
     }
-    // // ═══════════════════════════════════════════════════════════════════════
-    // //  SOCIAL RECOVERY
-    // // ═══════════════════════════════════════════════════════════════════════
 
-    // /**
-    //  * @notice Owner registers the guardian set.
-    //  *
-    //  * @param root       Merkle root of guardian commitments.
-    //  *                   Each leaf = keccak256(abi.encodePacked(guardianAddress, secret)).
-    //  * @param threshold  Minimum approvals needed to complete recovery.
-    //  * @param delay      Seconds between threshold-reached and executeRecovery().
-    //  */
-    // function setupRecovery(
-    //     bytes32 root,
-    //     uint256 threshold,
-    //     uint256 delay,
-    //     ZKPAuth calldata auth
-    // ) external {
-    //     _verifyZKP(auth);
-
-    //     require(threshold > 0, "StealthAccount: zero threshold");
-    //     guardianRoot = root;
-    //     guardianThreshold = threshold;
-    //     recoveryDelay = delay;
-    //     emit RecoverySetup(root, threshold, delay);
-    // }
-
-    // /**
-    //  * @notice Guardian approves a recovery round.
-    //  *
-    //  * @param newIndexCommitment  Proposed new owner address.  All approvals in a round
-    //  *                            must agree on the same newIndexCommitment.
-    //  * @param secret      The secret the guardian chose when the commitment was
-    //  *                    created: commitment = keccak256(msg.sender || secret).
-    //  * @param merkleProof Sibling hashes proving that commitment is a leaf in
-    //  *                    the guardianRoot Merkle tree.
-    //  *
-    //  * ZK-style guarantees:
-    //  *   • The commitment (hence guardian identity) is hidden until this call.
-    //  *   • The Merkle proof reveals only one leaf's position, not the full set.
-    //  */
-    // function approveRecovery(
-    //     bytes32 newIndexCommitment,
-    //     bytes32 secret,
-    //     bytes32[] calldata merkleProof
-    // ) external {
-    //     if (guardianRoot == bytes32(0)) revert RecoveryNotConfigured();
-
-    //     // ── 1. Rebuild the commitment from caller + secret ──────────────────
-    //     bytes32 commitment = poseidon2(
-    //         bytes32(uint256(uint160(msg.sender))),
-    //         secret
-    //     );
-
-    //     // ── 2. Verify Merkle inclusion proof (ZK set-membership) ────────────
-    //     if (!_verifyMerkleProof(merkleProof, guardianRoot, commitment)) {
-    //         revert InvalidGuardianProof();
-    //     }
-
-    //     // ── 3. Check for double-voting in this nonce round ──────────────────
-    //     if (approvedAt[commitment] == recoveryNonce + 1)
-    //         revert AlreadyApproved();
-
-    //     // ── 4. Enforce all approvals target the same newIndexCommitment ───────────────
-    //     if (pendingIndexCommitment == bytes32(0)) {
-    //         pendingIndexCommitment = newIndexCommitment;
-    //     } else if (pendingIndexCommitment != newIndexCommitment) {
-    //         revert NewCommitmentMismatch();
-    //     }
-
-    //     // ── 5. Record approval ───────────────────────────────────────────────
-    //     approvedAt[commitment] = recoveryNonce + 1;
-    //     approvalCount++;
-
-    //     emit RecoveryApproved(commitment, newIndexCommitment, approvalCount);
-
-    //     // ── 6. Start the timelock once threshold is reached ─────────────────
-    //     if (approvalCount >= guardianThreshold && thresholdReachedAt == 0) {
-    //         thresholdReachedAt = block.timestamp;
-    //     }
-    // }
-
-    // /**
-    //  * @notice Finalise recovery after the timelock expires.
-    //  *         Anyone may call this once conditions are met.
-    //  */
-    // function executeRecovery() external {
-    //     if (pendingIndexCommitment == bytes32(0)) revert NoActiveRecovery();
-    //     if (approvalCount < guardianThreshold) revert ThresholdNotReached();
-    //     if (block.timestamp < thresholdReachedAt + recoveryDelay)
-    //         revert TimelockNotExpired();
-
-    //     bytes32 oldCommitment = indexCommitment;
-    //     indexCommitment = pendingIndexCommitment;
-
-    //     // Reset round
-    //     _resetRecoveryRound();
-
-    //     emit RecoveryExecuted(oldCommitment, indexCommitment);
-    // }
-
-    // /**
-    //  * @notice Current owner cancels an in-progress recovery round.
-    //  */
-    // function cancelRecovery(ZKPAuth calldata auth) external {
-    //     _verifyZKP(auth);
-
-    //     if (pendingIndexCommitment == bytes32(0)) revert NoActiveRecovery();
-
-    //     uint256 nonce = recoveryNonce;
-    //     _resetRecoveryRound();
-
-    //     emit RecoveryCancelled(nonce);
-    // }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  ERC-4337 — Full Bundler-compatible implementation
-    // ═══════════════════════════════════════════════════════════════════════
-
-    struct UserOperation {
-        address sender;
-        uint256 nonce;
-        bytes initCode;
-        bytes callData;
-        uint256 callGasLimit;
-        uint256 verificationGasLimit;
-        uint256 preVerificationGas;
-        uint256 maxFeePerGas;
-        uint256 maxPriorityFeePerGas;
-        bytes paymasterAndData;
-        bytes signature;
-    }
-
-    /// @notice The canonical EntryPoint address (ERC-4337 v0.6, all networks)
-    address public constant ENTRY_POINT =
-        0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
-
-    /// @notice Called by the EntryPoint during UserOperation validation.
-    ///  1. Enforces only the EntryPoint can call it.
-    ///  2. Prefunds the EntryPoint with `missingAccountFunds`.
-    ///  3. Decodes the ZK proof from `signature` and verifies it.
-    // function validateUserOp(
-    //     UserOperation calldata userOp,
-    //     bytes32, // userOpHash (unused)
-    //     uint256 missingAccountFunds
-    // ) external returns (uint256 validationData) {
-    //     console.log("StealthAccount: validateUserOp called by", msg.sender);
-
-    //     // ===== 1. CHECK ENTRYPOINT =====
-    //     if (msg.sender != ENTRY_POINT) {
-    //         console.log("StealthAccount: NOT_ENTRY_POINT error");
-    //         revert("NOT_ENTRY_POINT");
-    //     }
-
-    //     // ===== 2. PREFUND =====
-    //     if (missingAccountFunds > 0) {
-    //         console.log("StealthAccount: Prefunding entryPoint:", missingAccountFunds);
-    //         (bool success, ) = payable(ENTRY_POINT).call{
-    //             value: missingAccountFunds
-    //         }("");
-    //         require(success, "PREFUND_FAILED");
-    //     }
-
-    //     // ===== 3. DECODE PROOF =====
-    //     console.log("StealthAccount: Decoding ZK signature length:", userOp.signature.length);
-    //     ZKPAuth memory auth = abi.decode(userOp.signature, (ZKPAuth));
-
-    //     // ===== 4. GET ROOT =====
-    //     bytes32 currentRoot = treeManager.root();
-
-    //     if (currentRoot == bytes32(0)) {
-    //         console.log("StealthAccount: ROOT_NOT_SET error");
-    //         revert("ROOT_NOT_SET");
-    //     }
-
-    //     // ===== 5. BUILD PUBLIC SIGNALS =====
-    //     uint256[2] memory publicSignals;
-    //     publicSignals[0] = uint256(currentRoot);
-    //     publicSignals[1] = uint256(indexCommitment);
-
-    //     // ===== DEBUG EVENT & LOGS =====
-    //     console.log("StealthAccount: Public Signals:");
-    //     console.log(publicSignals[0]);
-    //     console.log(publicSignals[1]);
-    //     emit DebugSignals(publicSignals[0], publicSignals[1]);
-
-    //     // ===== 6. CHECK VERIFIER =====
-    //     if (address(verifier) == address(0)) {
-    //         console.log("StealthAccount: VERIFIER_NOT_SET error");
-    //         revert("VERIFIER_NOT_SET");
-    //     }
-
-    //     // ===== 7. VERIFY PROOF =====
-    //     console.log("StealthAccount: Calling Plonk/Groth16 Verifier...");
-    //     bool ok = verifier.verifyProof(auth.a, auth.b, auth.c, publicSignals);
-
-    //     console.log("StealthAccount: Proof valid?", ok);
-    //     emit DebugProof(ok);
-
-    //     if (!ok) {
-    //         console.log("StealthAccount: ZK_PROOF_INVALID! Reverting.");
-    //         revert("ZK_PROOF_INVALID");
-    //     }
-
-    //     console.log("StealthAccount: validateUserOp PASSED!");
-    //     // ===== 8. SUCCESS =====
-    //     return 0;
-    // }
     event DebugPrefundFailed();
     function validateUserOp(
         UserOperation calldata userOp,
@@ -775,24 +496,6 @@ contract StealthAccount {
     {
         return abi.decode(sig, (ZKPAuth, uint256));
     }
-    /**
-     * @dev Standard binary Merkle proof verification using Poseidon.
-     *      Leaves are sorted before hashing at each level (OpenZeppelin standard).
-     */
-    function _verifyMerkleProof(
-        bytes32[] calldata proof,
-        bytes32 root,
-        bytes32 leaf
-    ) internal view returns (bool) {
-        bytes32 computed = leaf;
-        for (uint256 i = 0; i < proof.length; i++) {
-            bytes32 sibling = proof[i];
-            computed = computed < sibling
-                ? poseidon2(computed, sibling)
-                : poseidon2(sibling, computed);
-        }
-        return computed == root;
-    }
 
     function poseidon2(bytes32 a, bytes32 b) internal view returns (bytes32) {
         uint256[2] memory inputs;
@@ -803,12 +506,5 @@ contract StealthAccount {
 
     function poseidon1(bytes32 a) internal view returns (bytes32) {
         return poseidon2(a, bytes32(0));
-    }
-
-    function _resetRecoveryRound() internal {
-        recoveryNonce++;
-        pendingIndexCommitment = bytes32(0);
-        approvalCount = 0;
-        thresholdReachedAt = 0;
     }
 }

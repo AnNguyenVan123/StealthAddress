@@ -6,9 +6,10 @@ import { StealthAccount } from "./StealthAccount.sol";
 /**
  * @title StealthAccountFactory
  * @notice CREATE2 factory that deploys a StealthAccount for every new stealth address.
- * @dev The stealth EOA (ECDH-derived address) is used as CREATE2 salt, making each
- *      contract address unique and deterministic. Idempotent: calling deployFor()
- *      twice for the same stealth address returns the existing contract.
+ * @dev Address derivation follows CREATE2:
+ *      address = f(factory, salt=indexCommitment, keccak256(bytecode(indexCommitment))).
+ *      Idempotent: calling deployFor() twice with same indexCommitment
+ *      returns the existing contract.
  */
 contract StealthAccountFactory {
 
@@ -41,7 +42,6 @@ contract StealthAccountFactory {
      * @return account         The deployed StealthAccount contract address.
      */
     function deployFor(bytes32 indexCommitment) external returns (address account) {
-
         bytes32 salt = indexCommitment;
 
         bytes memory bytecode = _creationBytecode(indexCommitment);
@@ -75,7 +75,6 @@ contract StealthAccountFactory {
      * @return                The counterfactual contract address.
      */
     function getAddress(bytes32 indexCommitment) external view returns (address) {
-
         bytes32 salt = indexCommitment;
 
         bytes32 bytecodeHash = keccak256(_creationBytecode(indexCommitment));

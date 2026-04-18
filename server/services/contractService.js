@@ -21,6 +21,22 @@ export async function updateRootOnChain(
     try {
         console.log(`[⛓️] Updating root on-chain: ${newRootHex} (leaf: ${newLeafHex} at index ${leafIndex})`);
 
+        // ── Guard: verify the on-chain root matches what we expect ──────────
+        // The SMT verifier uses `uint256(root)` (current on-chain root) as
+        // publicSignals[0]. If our local oldRoot diverges, the proof will always
+        // fail — abort early with a clear message rather than wasting the prover.
+        const actualOnChainRoot = `0x${BigInt(await contract.root()).toString(16).padStart(64, '0')}`;
+        const normalizedOldRoot = `0x${BigInt(oldRootHex).toString(16).padStart(64, '0')}`;
+
+        if (actualOnChainRoot !== normalizedOldRoot) {
+            throw new Error(
+                `Server tree is out of sync with on-chain state.\n` +
+                `  Server oldRoot : ${normalizedOldRoot}\n` +
+                `  On-chain root  : ${actualOnChainRoot}\n` +
+                `→ Delete leaves.json and restart the server to re-sync.`
+            );
+        }
+
         const { auth } = await generateUpdateProof(
             oldRootHex,
             newRootHex,
