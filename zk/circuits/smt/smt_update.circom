@@ -16,13 +16,12 @@ template SMTUpdate(levels) {
     // Public Inputs
     signal input oldRoot;
     signal input newRoot;
+    signal input index;
+    signal input newLeaf;
    
-
     // Private Inputs
     signal input oldLeaf;
     signal input siblings[levels];
-    signal input leaf;
-    signal input index;
 
     // 1. Verify oldRoot
     component oldHashers[levels];
@@ -52,7 +51,7 @@ template SMTUpdate(levels) {
     component newHashers[levels];
     component newMuxers[levels];
     signal newHashes[levels + 1];
-    newHashes[0] <== leaf;
+    newHashes[0] <== newLeaf;
 
     for (var i = 0; i < levels; i++) {
         newHashers[i] = Poseidon(2);
@@ -70,4 +69,4 @@ template SMTUpdate(levels) {
     newRoot === newHashes[levels];
 }
 
-component main {public [oldRoot, newRoot]} = SMTUpdate(20);
+component main {public [oldRoot, newRoot, index, newLeaf]} = SMTUpdate(20);

@@ -236,7 +236,11 @@ export function computeIndexCommitmentForIndex(index, address) {
     const addressBigInt = BigInt(address);
     const indexHashField = poseidon([BigInt(index), 0n]);
     const indexHashBigInt = F.toObject(indexHashField);
-    const commitmentField = poseidon([indexHashBigInt, addressBigInt]);
+    
+    // Add in the finite field before hashing based on updated formula
+    const sum = F.add(F.e(indexHashBigInt), F.e(addressBigInt));
+    
+    const commitmentField = poseidon([sum]);
     const indexCommitmentBigInt = F.toObject(commitmentField);
     return '0x' + indexCommitmentBigInt.toString(16).padStart(64, '0');
 }
@@ -315,6 +319,18 @@ export function updateLeaf(oldCommitmentHex, newCommitmentHex) {
     leafMap.set(index, newCommitmentHex);
     tree.update(index, BigInt(newCommitmentHex));
     saveStore();
+    return true;
+}
+
+export function updateLeafByIndex(index, newCommitmentHex) {
+    const idx = Number(index);
+    if (!leafMap.has(idx)) return false;
+    leafMap.set(idx, newCommitmentHex);
+    tree.update(idx, BigInt(newCommitmentHex));
+    saveStore();
+    
+    // Also re-verify on-chain sync
+    initTree(); 
     return true;
 }
 

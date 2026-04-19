@@ -66,10 +66,9 @@ template StealthAccountZK(levels) {
     index_hash.inputs[0] <== pathIndices;
     index_hash.inputs[1] <== 0;
 
-    // Then hash(indexHash, sharedSecretHash)
-    component commitment_hash = Poseidon(2);
-    commitment_hash.inputs[0] <== index_hash.out;
-    commitment_hash.inputs[1] <== sharedSecretHash;
+    // Then hash(indexHash + sharedSecretHash)
+    component commitment_hash = Poseidon(1);
+    commitment_hash.inputs[0] <== index_hash.out + sharedSecretHash;
 
     // Ensure the required indexCommitment matches the computed one
     indexCommitment === commitment_hash.out;

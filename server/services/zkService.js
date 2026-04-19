@@ -21,7 +21,7 @@ export async function generateUpdateProof(oldRootHex, newRootHex, newLeafHex, le
     const circuitInputs = {
         oldRoot: BigInt(oldRootHex).toString(),
         newRoot: BigInt(newRootHex).toString(),
-        leaf: BigInt(newLeafHex).toString(),
+        newLeaf: BigInt(newLeafHex).toString(),
         index: leafIndex.toString(),
         oldLeaf: BigInt(oldLeafHex).toString(),
         siblings: proofRes.siblings.map((s) => BigInt(s[0]).toString())

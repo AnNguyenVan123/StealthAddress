@@ -15,9 +15,10 @@ async function generate() {
     // 2. Tính k = Poseidon(x)
     const k = poseidon([x]);
 
-    // 3. Tính indexCommitment = Poseidon(Poseidon(pathIndices, 0), sharedSecretHash)
+    // 3. Tính indexCommitment = Poseidon(indexHash + sharedSecretHash)
     const indexHash = poseidon([pathIndices, 0n]);
-    const indexCommitment = poseidon([indexHash, sharedSecretHash]);
+    const sum = F.add(F.e(indexHash), F.e(sharedSecretHash));
+    const indexCommitment = poseidon([sum]);
 
     // 4. Giả lập Merkle Proof và tính Root
     const merkleProof = [];

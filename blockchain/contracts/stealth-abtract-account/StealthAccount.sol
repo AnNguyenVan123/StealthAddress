@@ -64,8 +64,8 @@ contract StealthAccount {
     IOffchainMerkleTreeManager public treeManager;
     IPoseidon public poseidonHasher;
     IVerifier public verifier;
-    // TODO: wire the real ERC-4337 EntryPoint address per network.
-    address public constant ENTRY_POINT = address(0);
+    // Standard ERC-4337 EntryPoint v0.6 address
+    address public constant ENTRY_POINT = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
     // ===== EVENTS =====
     event DebugProof(bool success);
     event DebugSignals(uint256 s0, uint256 s1);

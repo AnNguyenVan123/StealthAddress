@@ -28,80 +28,100 @@ export default function Send() {
     }
 
     return (
-        <div className="flex flex-col gap-4">
-            <Toaster position="top-center" reverseOrder={false} />
+        <div className="w-full max-w-xl mx-auto animate-in fade-in zoom-in-95">
+            <Toaster position="top-center" reverseOrder={false} 
+                toastOptions={{
+                    style: {
+                        background: '#1f2022',
+                        color: '#fff',
+                        border: '1px solid #333'
+                    }
+                }}
+            />
 
-            <h3 className="text-lg font-semibold">Send Stealth Payment</h3>
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+                {/* Decorative background element */}
+                <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-blue-500/20 rounded-full blur-[60px]" />
+                
+                <h3 className="text-3xl font-extrabold mb-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Direct External Transfer</h3>
+                <p className="text-sm text-gray-400 mb-8 max-w-sm">
+                    Fund a recipient's Stealth Abstract Account directly from your MetaMask holding account.
+                </p>
 
-            <p className="text-sm text-gray-500">
-                A smart Abstract Account will be deployed for the recipient's stealth
-                address — they control it with their derived stealth key.
-            </p>
+                <div className="space-y-5 relative z-10">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                            Recipient Scan Public Key
+                        </label>
+                        <input
+                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
+                            placeholder="0x04..."
+                            value={scanPub}
+                            onChange={e => setScanPub(e.target.value)}
+                        />
+                    </div>
 
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Recipient Scan Public Key
-                </label>
-                <input
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm font-mono"
-                    placeholder="0x04..."
-                    value={scanPub}
-                    onChange={e => setScanPub(e.target.value)}
-                />
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                            Recipient Spend Public Key
+                        </label>
+                        <input
+                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
+                            placeholder="0x04..."
+                            value={spendPub}
+                            onChange={e => setSpendPub(e.target.value)}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                            Recipient Identity Hash (Index Hash)
+                        </label>
+                        <input
+                            type="text"
+                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-blue-300 placeholder-gray-600 transition-all"
+                            placeholder="0x..."
+                            value={recipientIndexHash}
+                            onChange={e => setRecipientIndexHash(e.target.value)}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                            Transfer Amount
+                        </label>
+                        <div className="relative">
+                            <input
+                                type="number"
+                                className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-lg font-bold text-white placeholder-gray-600 transition-all pl-12"
+                                placeholder="0.00"
+                                value={amount}
+                                onChange={e => setAmount(e.target.value)}
+                            />
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Ξ</span>
+                        </div>
+                    </div>
+
+                    <div className="pt-4">
+                        <button
+                            onClick={handleSend}
+                            disabled={isSending || !scanPub || !spendPub || !recipientIndexHash || !amount}
+                            className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-500/20 text-white font-bold tracking-wider uppercase rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 transform hover:scale-[1.01] active:scale-95"
+                        >
+                            {isSending ? (
+                                <>
+                                    <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                                    {progress || "Broadcasting..."}
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-xl">🚀</span> Broadcast Stealth Payment
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
             </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Recipient Spend Public Key
-                </label>
-                <input
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm font-mono"
-                    placeholder="0x04..."
-                    value={spendPub}
-                    onChange={e => setSpendPub(e.target.value)}
-                />
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Recipient Account Index Hash
-                </label>
-                <input
-                    type="text"
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm font-mono"
-                    placeholder="0x..."
-                    value={recipientIndexHash}
-                    onChange={e => setRecipientIndexHash(e.target.value)}
-                />
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount (ETH)
-                </label>
-                <input
-                    type="number"
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-                    placeholder="0.01"
-                    value={amount}
-                    onChange={e => setAmount(e.target.value)}
-                />
-            </div>
-
-            <button
-                onClick={handleSend}
-                disabled={isSending}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-            >
-                {isSending ? (
-                    <>
-                        <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                        {progress || "Sending..."}
-                    </>
-                ) : (
-                    "Send via Abstract Account"
-                )}
-            </button>
         </div>
     );
 }

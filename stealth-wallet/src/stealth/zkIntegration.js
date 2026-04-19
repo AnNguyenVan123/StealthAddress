@@ -149,7 +149,14 @@ export async function computeIndexHash(index) {
 export async function computeIndexCommitment(indexHashHex, sharedSecretHex) {
     const pos = await getPoseidon();
     const F = pos.F;
-    const commitmentField = pos([BigInt(indexHashHex), BigInt(sharedSecretHex)]);
+    
+    const indexHashInt = BigInt(indexHashHex);
+    const sharedSecretInt = BigInt(sharedSecretHex);
+    
+    // Add in the finite field before hashing based on updated formula
+    const sum = F.add(F.e(indexHashInt), F.e(sharedSecretInt));
+    
+    const commitmentField = pos([sum]);
     const commitmentBigInt = F.toObject(commitmentField);
     return "0x" + commitmentBigInt.toString(16).padStart(64, '0');
 }

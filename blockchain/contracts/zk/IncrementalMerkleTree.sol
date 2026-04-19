@@ -6,7 +6,7 @@ interface ISMTVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        uint256[2] calldata input
+        uint256[4] calldata input
     ) external view returns (bool);
 }
 
@@ -16,7 +16,7 @@ interface ISMTVerifier {
  *      This contract stores the active root hash and leaf count, updated via ZK proof
  *      verified by the SMT update circuit (smt_update.circom).
  *
- *      Public signals expected by the circuit: [oldRoot, newRoot]
+ *      Public signals expected by the circuit: [oldRoot, newRoot, index, newLeaf]
  *
  *      On fresh deployment `root` is bytes32(0).  The deployer MUST call
  *      `initRoot(emptyTreeRoot)` once before any `updateRoot()` call so that
@@ -27,8 +27,11 @@ contract IncrementalMerkleTree {
     uint32 public nextIndex;
     ISMTVerifier public verifier;
 
+    mapping(uint32 => address) public socialContractMap;
+
     event RootUpdated(bytes32 indexed oldRoot, bytes32 indexed newRoot);
     event RootInitialized(bytes32 initialRoot);
+    event SocialContractRegistered(uint32 indexed index, address indexed socialContract);
 
     struct ZKPAuth {
         uint256[2] a;
@@ -43,12 +46,6 @@ contract IncrementalMerkleTree {
 
     /**
      * @notice Set the initial Poseidon empty-tree root.
-     * @dev    Can only be called ONCE — while root is still bytes32(0).
-     *         No caller restriction: the one-time guard is sufficient because
-     *         the correct initial root is publicly computable (Poseidon zeroHash[20]).
-     *
-     * @param _initialRoot  The Poseidon root of the empty 20-depth binary tree
-     *                      (zeroHashes[20] from PoseidonSparseMerkleTree).
      */
     function initRoot(bytes32 _initialRoot) external {
         require(root == bytes32(0), "IncrementalMerkleTree: already initialised");
@@ -58,20 +55,37 @@ contract IncrementalMerkleTree {
     }
 
     /**
+     * @notice Register a Social Recovery Contract for a specific index.
+     * @dev Simple trust model: can only be registered once. In production, 
+     *      this should require a signature from the leaf owner or be done at account creation.
+     */
+    function registerSocialContract(uint32 index, address socialContract) external {
+        require(socialContractMap[index] == address(0), "IncrementalMerkleTree: already registered");
+        socialContractMap[index] = socialContract;
+        emit SocialContractRegistered(index, socialContract);
+    }
+
+    /**
      * @notice Update the on-chain Merkle root using a ZK proof from smt_update.circom.
      *
-     * @param newRoot  The new root after inserting/updating `leaf` at `index`.
-     * @param leaf     The leaf value that was inserted/updated (private in circuit, not verified here).
+     * @param newRoot  The new root after inserting/updating `newLeaf` at `index`.
+     * @param newLeaf  The leaf value that was inserted/updated.
      * @param index    The leaf index (tracked for nextIndex bookkeeping).
-     * @param auth     Groth16 proof (a, b, c). Public signals: [oldRoot, newRoot].
+     * @param auth     Groth16 proof (a, b, c). Public signals: [oldRoot, newRoot, index, newLeaf].
      */
     function updateRoot(
         bytes32 newRoot,
-        bytes32 leaf,
+        bytes32 newLeaf,
         uint32 index,
         ZKPAuth calldata auth
     ) external {
-        _verifyUpdateZKP(newRoot, auth);
+        // Enforce social recovery logic if this is an update to an existing leaf
+        if (index < nextIndex) {
+            require(socialContractMap[index] != address(0), "IncrementalMerkleTree: social contract not setup");
+            require(msg.sender == socialContractMap[index], "IncrementalMerkleTree: unauthorized update");
+        }
+
+        _verifyUpdateZKP(newRoot, newLeaf, index, auth);
 
         emit RootUpdated(root, newRoot);
         root = newRoot;
@@ -82,16 +96,20 @@ contract IncrementalMerkleTree {
 
     /**
      * @dev Verifies the SMT update ZK proof.
-     *      Public signals passed to verifier: [oldRoot, newRoot]
-     *      which matches smt_update.circom `public [oldRoot, newRoot]`.
+     *      Public signals passed to verifier: [oldRoot, newRoot, index, newLeaf]
+     *      which matches smt_update.circom `public [oldRoot, newRoot, index, newLeaf]`.
      */
     function _verifyUpdateZKP(
         bytes32 newRoot,
+        bytes32 newLeaf,
+        uint32 index,
         ZKPAuth calldata auth
     ) internal view {
-        uint256[2] memory publicSignals;
+        uint256[4] memory publicSignals;
         publicSignals[0] = uint256(root);    // oldRoot (current on-chain root)
         publicSignals[1] = uint256(newRoot); // newRoot
+        publicSignals[2] = uint256(index);   // index
+        publicSignals[3] = uint256(newLeaf); // newLeaf
 
         require(
             address(verifier) != address(0),

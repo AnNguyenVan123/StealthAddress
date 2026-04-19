@@ -10,7 +10,11 @@ import {
     findLeafIndex,
     hasLeaf,
     getLeaves,
+    getLeafMap,
+    getPoseidon,
+    getF,
     getIsTreeSynced,
+    updateLeafByIndex
 } from '../services/merkleService.js';
 import { updateRootOnChain } from '../services/contractService.js';
 
@@ -133,6 +137,73 @@ router.get('/find/:leafKey', (req, res) => {
         indexCommitment,
         newRoot: getCurrentRootHex(),
     });
+});
+
+router.post('/recovery-proof', async (req, res) => {
+    const { index, newLeaf } = req.body;
+    if (index === undefined || index === null || !newLeaf) {
+        return res.status(400).json({ error: "Missing index or newLeaf" });
+    }
+
+    try {
+        const leafMap = getLeafMap();           // sparse: index (string) → hex
+        const oldLeafHex = leafMap[String(index)] ?? ('0x' + '0'.repeat(64));
+        const oldRootHex = getCurrentRootHex();
+
+        // Fetch sibling path for the EXISTING tree state (before update)
+        const { rawProof: proofRes } = createMerkleProof(Number(index));
+
+        // Build new root by walking the sibling path with the new leaf value
+        const poseidon = getPoseidon();
+        const F = getF();
+        let hash = F.e(BigInt(newLeaf));
+        for (let i = 0; i < proofRes.siblings.length; i++) {
+            const sibling = F.e(BigInt(proofRes.siblings[i][0]));
+            const bit = proofRes.pathIndices[i];
+            hash = bit === 0
+                ? poseidon([hash, sibling])
+                : poseidon([sibling, hash]);
+        }
+        const newRootHex = '0x' + F.toObject(hash).toString(16).padStart(64, '0');
+
+        // Generate ZK proof via zkService
+        const { generateUpdateProof } = await import('../services/zkService.js');
+        const { auth } = await generateUpdateProof(
+            oldRootHex,
+            newRootHex,
+            newLeaf,
+            index,
+            oldLeafHex,
+            proofRes
+        );
+
+        return res.json({
+            success: true,
+            newRoot: newRootHex,
+            auth
+        });
+    } catch (error) {
+        console.error("[recovery-proof] Error:", error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/sync-recovery', async (req, res) => {
+    const { index, newLeaf } = req.body;
+    if (index === undefined || index === null || !newLeaf) {
+        return res.status(400).json({ error: "Missing index or newLeaf" });
+    }
+
+    try {
+        const success = updateLeafByIndex(index, newLeaf);
+        if (!success) {
+            return res.status(404).json({ error: "Leaf not found on server" });
+        }
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("[sync-recovery] Error:", error);
+        return res.status(500).json({ error: error.message });
+    }
 });
 
 /**

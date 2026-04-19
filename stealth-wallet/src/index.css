@@ -1,1 +1,89 @@
 @import "tailwindcss";
+
+/* ── Global resets + Inter font ───────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #0d0d12;
+  color: #f1f1f1;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* ── Custom thin dark scrollbar ───────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── animate-in utility (Tailwind doesn't ship this by default) ───── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slide-in-from-bottom {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes zoom-in-95 {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(.16,1,.3,1);
+}
+.fade-in            { animation-name: fade-in; }
+.slide-in-from-bottom-4 { animation-name: slide-in-from-bottom; }
+.zoom-in-95         { animation-name: zoom-in-95; }
+.duration-500       { animation-duration: 500ms; }
+
+/* ── Glassmorphism card shimmer effect ────────────────────────────── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Gradient text helper ─────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #60a5fa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Pulse glow animation for balance display ─────────────────────── */
+@keyframes pulse-glow {
+  0%, 100% { text-shadow: 0 0 20px rgba(129, 140, 248, 0.3); }
+  50%       { text-shadow: 0 0 40px rgba(129, 140, 248, 0.6); }
+}
+.pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* ── Toast overrides ──────────────────────────────────────────────── */
+.react-hot-toast > div {
+  font-family: 'Inter', sans-serif !important;
+}
