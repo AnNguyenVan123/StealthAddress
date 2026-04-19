@@ -83,6 +83,9 @@ export function useStealthWallet(meta, setMeta) {
                 sendScanPub: "",
                 sendSpendPub: "",
                 sendAmount: "",
+                sendTokenType: "ETH",
+                sendTokenAddress: "",
+                sendTokenId: "",
             }));
             setStealthWallets(enriched);
             return enriched;
@@ -109,8 +112,17 @@ export function useStealthWallet(meta, setMeta) {
      */
     async function sendFromWallet(index) {
         const w = stealthWallets[index];
-        if (!w.sendScanPub || !w.sendSpendPub || !w.sendAmount || w.sendRecipientIndexHash === undefined || w.sendRecipientIndexHash === "") {
-            throw new Error("Please enter recipient scan key, spend key, account index hash, and ETH amount.");
+        if (!w.sendScanPub || !w.sendSpendPub || w.sendRecipientIndexHash === undefined || w.sendRecipientIndexHash === "") {
+            throw new Error("Please enter recipient scan key, spend key, and account index hash.");
+        }
+        if (w.sendTokenType === "ETH" && !w.sendAmount) {
+             throw new Error("Please enter ETH amount.");
+        }
+        if (w.sendTokenType === "ERC20" && (!w.sendTokenAddress || !w.sendAmount)) {
+             throw new Error("Please enter ERC20 contract address and amount.");
+        }
+        if (w.sendTokenType === "ERC721" && (!w.sendTokenAddress || !w.sendTokenId)) {
+             throw new Error("Please enter NFT contract address and token ID.");
         }
 
         setSendingIndex(index);
@@ -130,6 +142,7 @@ export function useStealthWallet(meta, setMeta) {
                 },
                 { scanPub: w.sendScanPub, spendPub: w.sendSpendPub, indexHash: w.sendRecipientIndexHash },
                 w.sendAmount,
+                { tokenType: w.sendTokenType, tokenAddress: w.sendTokenAddress, tokenId: w.sendTokenId },
                 (msg) => setSendProgress(msg)
             );
 
@@ -137,6 +150,8 @@ export function useStealthWallet(meta, setMeta) {
             updateWalletField(index, "sendScanPub", "");
             updateWalletField(index, "sendSpendPub", "");
             updateWalletField(index, "sendAmount", "");
+            updateWalletField(index, "sendTokenAddress", "");
+            updateWalletField(index, "sendTokenId", "");
 
             return txHash;
         } finally {

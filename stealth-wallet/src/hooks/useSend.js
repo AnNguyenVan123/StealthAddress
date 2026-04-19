@@ -12,6 +12,9 @@ export function useSend() {
     const [spendPub, setSpendPub] = useState("");
     const [recipientIndexHash, setRecipientIndexHash] = useState("");
     const [amount, setAmount]     = useState("");
+    const [tokenType, setTokenType] = useState("ETH");
+    const [tokenAddress, setTokenAddress] = useState("");
+    const [tokenId, setTokenId] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [progress, setProgress] = useState("");
 
@@ -21,8 +24,17 @@ export function useSend() {
      * @returns {string} txHash
      */
     async function send() {
-        if (!scanPub || !spendPub || !recipientIndexHash || !amount) {
-            throw new Error("Please fill in all fields.");
+        if (!scanPub || !spendPub || !recipientIndexHash) {
+            throw new Error("Please fill in recipient information.");
+        }
+        if (tokenType !== "ERC721" && !amount) {
+            throw new Error("Please enter transfer amount.");
+        }
+        if (tokenType !== "ETH" && !tokenAddress) {
+            throw new Error("Please enter token contract address.");
+        }
+        if (tokenType === "ERC721" && !tokenId) {
+            throw new Error("Please enter token ID.");
         }
 
         setIsSending(true);
@@ -32,6 +44,7 @@ export function useSend() {
             const txHash = await sendStealthPayment(
                 { scanPub, spendPub, indexHash: recipientIndexHash },
                 amount,
+                { tokenType, tokenAddress, tokenId },
                 (msg) => setProgress(msg)
             );
 
@@ -40,6 +53,9 @@ export function useSend() {
             setSpendPub("");
             setRecipientIndexHash("");
             setAmount("");
+            setTokenType("ETH");
+            setTokenAddress("");
+            setTokenId("");
 
             return txHash;
         } finally {
@@ -53,6 +69,9 @@ export function useSend() {
         spendPub, setSpendPub,
         recipientIndexHash, setRecipientIndexHash,
         amount, setAmount,
+        tokenType, setTokenType,
+        tokenAddress, setTokenAddress,
+        tokenId, setTokenId,
         isSending,
         progress,
         send,

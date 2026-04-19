@@ -65,6 +65,9 @@ export async function callSpendZkProofApi({
     senderSharedSecretHash, // circuit private input #2
     ephemeralPub,
     metadata,
+    tokenType,
+    tokenAddress,
+    tokenId,
     factoryAddress,
     announcerAddress,
 }) {
@@ -75,7 +78,7 @@ export async function callSpendZkProofApi({
             senderStealthAddress,
             recipientIndexCommitment,
             recipientAbstractAccount,
-            valueString: ethers.parseEther(amountEther).toString(),
+            valueString: amountEther, // Passed directly, pre-parsed
             senderIndexCommitment,
             spendPriv,
             senderSharedSecretHash,
@@ -84,6 +87,9 @@ export async function callSpendZkProofApi({
             schemeId: 1,
             ephemeralPub,
             metadata,
+            tokenType,
+            tokenAddress,
+            tokenId
         }),
     });
 
@@ -107,7 +113,7 @@ export async function callSpendZkProofApi({
  * @param {string} amountEther
  * @param {function} onProgress
  */
-export async function executeStealthTransfer(sender, recipient, amountEther, onProgress = () => { }) {
+export async function executeStealthTransfer(sender, recipient, amountEther, params = {}, onProgress = () => { }) {
     if (
         !sender?.address ||
         !sender?.indexCommitment ||
@@ -135,17 +141,32 @@ export async function executeStealthTransfer(sender, recipient, amountEther, onP
 
     const metadata = buildAnnouncerMetadata(stealth.viewTag, stealth.sharedSecretHash);
 
+    let parsedValue = ethers.parseEther(amountEther || "0").toString();
+    if (params.tokenType === "ERC20") {
+        try {
+            const provider = new ethers.JsonRpcProvider(RPC_URL);
+            const token = new ethers.Contract(params.tokenAddress, ["function decimals() view returns (uint8)"], provider);
+            const decimals = await token.decimals();
+            parsedValue = ethers.parseUnits(amountEther || "0", Number(decimals)).toString();
+        } catch (e) {
+            console.warn("Failed to fetch decimals, assuming 18");
+        }
+    }
+
     onProgress("Submitting to relayer to generate ZK Proof and execute transfer...");
     const txHash = await callSpendZkProofApi({
         senderStealthAddress: sender.address,
         recipientIndexCommitment: indexCommitment,
         recipientAbstractAccount,
-        amountEther,
+        amountEther: parsedValue,
         senderIndexCommitment: sender.indexCommitment,
         spendPriv: sender.spendPriv,           // private ZK circuit input
         senderSharedSecretHash: sender.sharedSecretHash, // private ZK circuit input #2
         ephemeralPub: stealth.ephemeralPub,
         metadata,
+        tokenType: params.tokenType,
+        tokenAddress: params.tokenAddress,
+        tokenId: params.tokenId,
         factoryAddress: FACTORY_ADDRESS,
         announcerAddress: ANNOUNCER_ADDRESS,
     });
@@ -180,7 +201,7 @@ export async function executeStealthTransfer(sender, recipient, amountEther, onP
  * @param {function} onProgress
  * @returns {string} announceTxHash
  */
-export async function sendStealthPayment(recipient, amountEther, onProgress = () => { }) {
+export async function sendStealthPayment(recipient, amountEther, params = {}, onProgress = () => { }) {
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
 
@@ -195,13 +216,34 @@ export async function sendStealthPayment(recipient, amountEther, onProgress = ()
     const factory = new ethers.Contract(FACTORY_ADDRESS, stealthAccountFactoryAbi, signer);
     const abstractAccountAddress = await factory.getFunction("getAddress")(indexCommitment);
 
-    // Step 3: Send ETH to the recipient's Abstract Account
-    onProgress("Sending ETH...");
-    const sendTx = await signer.sendTransaction({
-        to: abstractAccountAddress,
-        value: ethers.parseEther(amountEther),
-    });
-    await sendTx.wait();
+    // Step 3: Send Asset to the recipient's Abstract Account
+    if (params.tokenType === "ERC20") {
+        onProgress("Sending ERC-20...");
+        const erc20Abi = ["function decimals() view returns (uint8)", "function transfer(address to, uint256 amount) returns (bool)"];
+        const tokenContract = new ethers.Contract(params.tokenAddress, erc20Abi, signer);
+        let decimals = 18;
+        try {
+            decimals = await tokenContract.decimals();
+        } catch (e) {
+            console.warn("Failed to fetch decimals, assuming 18");
+        }
+        const parsedAmount = ethers.parseUnits(amountEther || "0", Number(decimals));
+        const sendTx = await tokenContract.transfer(abstractAccountAddress, parsedAmount);
+        await sendTx.wait();
+    } else if (params.tokenType === "ERC721") {
+        onProgress("Sending ERC-721...");
+        const erc721Abi = ["function transferFrom(address from, address to, uint256 tokenId)"];
+        const tokenContract = new ethers.Contract(params.tokenAddress, erc721Abi, signer);
+        const sendTx = await tokenContract.transferFrom(await signer.getAddress(), abstractAccountAddress, params.tokenId);
+        await sendTx.wait();
+    } else {
+        onProgress("Sending ETH...");
+        const sendTx = await signer.sendTransaction({
+            to: abstractAccountAddress,
+            value: ethers.parseEther(amountEther || "0"),
+        });
+        await sendTx.wait();
+    }
 
     // Step 4: Announce on-chain (ERC-5564)
     // Announced address is the ECDH-derived stealthEOA so the recipient's scanner can detect it.

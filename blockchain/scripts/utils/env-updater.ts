@@ -54,6 +54,7 @@ export function updateProjectEnvs(addresses: {
   announcer: string;
   verifier: string;
   smtVerifier: string;
+  paymaster: string;
 }) {
   const rootDir = path.resolve(__dirname, "../../../"); // blockchain/scripts/utils -> blockchain/scripts -> blockchain -> ROOT
   const serverEnvPath = path.join(rootDir, "server", ".env");
@@ -65,12 +66,14 @@ export function updateProjectEnvs(addresses: {
     VERIFIER_ADDRESS: addresses.verifier,
     SMT_VERIFIER_ADDRESS: addresses.smtVerifier,
     POSEIDON_ADDRESS: addresses.poseidon,
+    PAYMASTER_ADDRESS: addresses.paymaster,
   });
 
   // Update Client .env
   updateEnvFile(clientEnvPath, {
     VITE_FACTORY_ADDRESS: addresses.stealthFactory,
     VITE_ANNOUNCER_ADDRESS: addresses.announcer,
+    VITE_PAYMASTER_ADDRESS: addresses.paymaster,
   });
 
   console.log("✅ All .env files updated successfully!");

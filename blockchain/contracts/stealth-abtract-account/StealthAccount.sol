@@ -290,6 +290,130 @@ contract StealthAccount {
         return result;
     }
 
+    function executeERC20StealthTransfer(
+        address announcer,
+        uint256 schemeId,
+        address token,
+        address stealthAddress,
+        uint256 amount,
+        bytes calldata ephemeralPubKey,
+        bytes calldata metadata,
+        ZKPAuth calldata auth
+    ) external returns (bytes memory) {
+        emit DebugExecuteStep("START_ERC20_STEALTH");
+
+        // ===== 1. VERIFY ZKP =====
+        (
+            bool ok,
+            string memory reason,
+            uint256 root,
+            uint256 index
+        ) = _verifyZKP(auth);
+
+        emit DebugZKP(ok, reason, root, index);
+
+        if (!ok) {
+            emit DebugExecuteStep("ZKP_FAILED");
+            revert(reason);
+        }
+
+        emit DebugExecuteStep("ZKP_PASSED");
+
+        // ===== 2. TRANSFER ERC20 =====
+        (bool success, bytes memory result) = token.call(
+            abi.encodeWithSignature("transfer(address,uint256)", stealthAddress, amount)
+        );
+
+        if (!success) {
+            emit DebugExecuteStep("ERC20_TRANSFER_FAILED");
+            revert("ERC20_TRANSFER_FAILED");
+        }
+
+        emit DebugExecuteStep("ERC20_TRANSFER_SUCCESS");
+
+        // ===== 3. ANNOUNCE =====
+        try
+            IAnnouncer(announcer).announce(
+                schemeId,
+                stealthAddress,
+                ephemeralPubKey,
+                metadata
+            )
+        {
+            emit DebugExecuteStep("ANNOUNCE_SUCCESS");
+        } catch {
+            emit DebugExecuteStep("ANNOUNCE_FAILED");
+            revert("ANNOUNCE_FAILED");
+        }
+        
+        // Emitting the call data for tracking
+        emit Executed(stealthAddress, 0, abi.encodeWithSignature("transfer(address,uint256)", stealthAddress, amount));
+
+        return result;
+    }
+
+    function executeERC721StealthTransfer(
+        address announcer,
+        uint256 schemeId,
+        address token,
+        address stealthAddress,
+        uint256 tokenId,
+        bytes calldata ephemeralPubKey,
+        bytes calldata metadata,
+        ZKPAuth calldata auth
+    ) external returns (bytes memory) {
+        emit DebugExecuteStep("START_ERC721_STEALTH");
+
+        // ===== 1. VERIFY ZKP =====
+        (
+            bool ok,
+            string memory reason,
+            uint256 root,
+            uint256 index
+        ) = _verifyZKP(auth);
+
+        emit DebugZKP(ok, reason, root, index);
+
+        if (!ok) {
+            emit DebugExecuteStep("ZKP_FAILED");
+            revert(reason);
+        }
+
+        emit DebugExecuteStep("ZKP_PASSED");
+
+        // ===== 2. TRANSFER ERC721 =====
+        (bool success, bytes memory result) = token.call(
+            abi.encodeWithSignature("transferFrom(address,address,uint256)", address(this), stealthAddress, tokenId)
+        );
+
+        if (!success) {
+            emit DebugExecuteStep("ERC721_TRANSFER_FAILED");
+            revert("ERC721_TRANSFER_FAILED");
+        }
+
+        emit DebugExecuteStep("ERC721_TRANSFER_SUCCESS");
+
+        // ===== 3. ANNOUNCE =====
+        try
+            IAnnouncer(announcer).announce(
+                schemeId,
+                stealthAddress,
+                ephemeralPubKey,
+                metadata
+            )
+        {
+            emit DebugExecuteStep("ANNOUNCE_SUCCESS");
+        } catch {
+            emit DebugExecuteStep("ANNOUNCE_FAILED");
+            revert("ANNOUNCE_FAILED");
+        }
+        
+        // Emitting the call data for tracking
+        emit Executed(stealthAddress, 0, abi.encodeWithSignature("transferFrom(address,address,uint256)", address(this), stealthAddress, tokenId));
+
+        return result;
+    }
+
     event DebugPrefundFailed();
     function validateUserOp(
         UserOperation calldata userOp,

@@ -182,6 +182,43 @@ async function main() {
   console.log(`ERC5564Announcer deployed at: ${announcerAddress}`);
 
   // =========================
+  // 7. Deploy OmniPaymaster
+  // =========================
+  console.log("Deploying OmniPaymaster...");
+  const entryPointAddress = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"; // Standard EntryPoint v0.6
+  
+  const paymasterArtifact = await hre.artifacts.readArtifact("OmniPaymaster");
+
+  const paymasterHash = await walletClient.deployContract({
+    abi: paymasterArtifact.abi,
+    bytecode: paymasterArtifact.bytecode as `0x${string}`,
+    args: [entryPointAddress],
+    account,
+  });
+
+  const paymasterReceipt = await publicClient.waitForTransactionReceipt({
+    hash: paymasterHash,
+  });
+
+  const paymasterAddress = paymasterReceipt.contractAddress!;
+  console.log(`OmniPaymaster deployed at: ${paymasterAddress}`);
+
+  // Also deposit some ETH into the paymaster to sponsor transactions
+  try {
+      const depositHash = await walletClient.writeContract({
+        address: paymasterAddress,
+        abi: paymasterArtifact.abi,
+        functionName: "deposit",
+        value: 5000000000000000000n, // 5 ETH
+        account,
+      });
+      await publicClient.waitForTransactionReceipt({ hash: depositHash });
+      console.log("Deposited 5 ETH to paymaster");
+  } catch (e) {
+      console.log("Failed to deposit to paymaster:", e);
+  }
+
+  // =========================
   // DONE
   // =========================
   console.log("\n=================================");
@@ -193,6 +230,7 @@ async function main() {
   console.log(`ANNOUNCER_ADDRESS=${announcerAddress}`);
   console.log(`VERIFIER_ADDRESS=${verifierAddress}`);
   console.log(`SMT_VERIFIER_ADDRESS=${smtVerifierAddress}`);
+  console.log(`PAYMASTER_ADDRESS=${paymasterAddress}`);
   console.log("=================================\n");
 
 
@@ -204,6 +242,7 @@ async function main() {
     announcer: announcerAddress,
     verifier: verifierAddress,
     smtVerifier: smtVerifierAddress,
+    paymaster: paymasterAddress,
   });
 }
 

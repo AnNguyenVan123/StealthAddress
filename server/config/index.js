@@ -12,6 +12,7 @@ export const LEAVES_FILE = process.env.LEAVES_FILE || './leaves.json';
 
 // ERC-4337 EntryPoint v0.6 (canonical on all networks)
 export const ENTRY_POINT = '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
+export const PAYMASTER_ADDRESS = process.env.PAYMASTER_ADDRESS;
 
 // Validate critical env vars
 if (!RPC_URL) {

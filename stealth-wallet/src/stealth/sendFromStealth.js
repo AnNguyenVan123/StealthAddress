@@ -3,7 +3,7 @@ import { ethers } from "ethers"
 const RPC = import.meta.env.VITE_RPC_URL;
 
 const provider =
-new ethers.JsonRpcProvider(RPC)
+    new ethers.JsonRpcProvider(RPC)
 
 export async function sendFromStealth({
 
@@ -24,7 +24,7 @@ export async function sendFromStealth({
 
             to,
             value:
-                ethers.parseEther(amount)
+                ethers.parseUnits(amount, 0)
 
         })
 

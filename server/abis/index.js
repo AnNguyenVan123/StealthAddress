@@ -11,6 +11,8 @@ export const stealthABI = [
     'function debugVerifyProof(bytes calldata signature) external view returns (bool ok, string memory reason, uint256 rootSig, uint256 indexSig)',
     'function execute(address to, uint256 value, bytes calldata data, tuple(uint256[2] a, uint256[2][2] b, uint256[2] c) auth) external returns (bytes)',
     'function executeStealthTransfer(address announcer, uint256 schemeId, address stealthAddress, uint256 value, bytes calldata ephemeralPubKey, bytes calldata metadata, tuple(uint256[2] a, uint256[2][2] b, uint256[2] c) auth) external returns (bytes)',
+    'function executeERC20StealthTransfer(address announcer, uint256 schemeId, address token, address stealthAddress, uint256 amount, bytes calldata ephemeralPubKey, bytes calldata metadata, tuple(uint256[2] a, uint256[2][2] b, uint256[2] c) auth) external returns (bytes)',
+    'function executeERC721StealthTransfer(address announcer, uint256 schemeId, address token, address stealthAddress, uint256 tokenId, bytes calldata ephemeralPubKey, bytes calldata metadata, tuple(uint256[2] a, uint256[2][2] b, uint256[2] c) auth) external returns (bytes)',
     'error ExecutionFailed()',
 ];
 

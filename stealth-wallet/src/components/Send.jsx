@@ -7,6 +7,9 @@ export default function Send() {
         spendPub, setSpendPub,
         recipientIndexHash, setRecipientIndexHash,
         amount, setAmount,
+        tokenType, setTokenType,
+        tokenAddress, setTokenAddress,
+        tokenId, setTokenId,
         isSending,
         progress,
         send,
@@ -88,24 +91,66 @@ export default function Send() {
 
                     <div>
                         <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                            Transfer Amount
+                            Token Type
                         </label>
-                        <div className="relative">
-                            <input
-                                type="number"
-                                className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-lg font-bold text-white placeholder-gray-600 transition-all pl-12"
-                                placeholder="0.00"
-                                value={amount}
-                                onChange={e => setAmount(e.target.value)}
-                            />
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Ξ</span>
-                        </div>
+                        <select
+                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white transition-all mb-5"
+                            value={tokenType}
+                            onChange={(e) => setTokenType(e.target.value)}
+                        >
+                            <option value="ETH">ETH</option>
+                            <option value="ERC20">ERC-20</option>
+                            <option value="ERC721">ERC-721 (NFT)</option>
+                        </select>
+                        {(tokenType === "ERC20" || tokenType === "ERC721") && (
+                            <div className="mb-5">
+                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                                    Token Address
+                                </label>
+                                <input
+                                    className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
+                                    placeholder="0x..."
+                                    value={tokenAddress}
+                                    onChange={e => setTokenAddress(e.target.value)}
+                                />
+                            </div>
+                        )}
+                        {tokenType === "ERC721" && (
+                            <div className="mb-5">
+                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                                    Token ID
+                                </label>
+                                <input
+                                    className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
+                                    placeholder="e.g. 1"
+                                    value={tokenId}
+                                    onChange={e => setTokenId(e.target.value)}
+                                />
+                            </div>
+                        )}
+                        {tokenType !== "ERC721" && (
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                                    Transfer Amount
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-lg font-bold text-white placeholder-gray-600 transition-all pl-12"
+                                        placeholder="0.00"
+                                        value={amount}
+                                        onChange={e => setAmount(e.target.value)}
+                                    />
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Ξ</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="pt-4">
                         <button
                             onClick={handleSend}
-                            disabled={isSending || !scanPub || !spendPub || !recipientIndexHash || !amount}
+                            disabled={isSending || !scanPub || !spendPub || !recipientIndexHash || (tokenType !== 'ERC721' && !amount) || (tokenType !== 'ETH' && !tokenAddress) || (tokenType === 'ERC721' && !tokenId)}
                             className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-500/20 text-white font-bold tracking-wider uppercase rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 transform hover:scale-[1.01] active:scale-95"
                         >
                             {isSending ? (

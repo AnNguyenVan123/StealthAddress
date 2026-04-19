@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { ethers } from 'ethers';
-import { signer, provider, ENTRY_POINT } from '../config/index.js';
+import { signer, provider, ENTRY_POINT, PAYMASTER_ADDRESS } from '../config/index.js';
 import { stealthABI, factoryABI, entryPointABI } from '../abis/index.js';
 import { generateSpendProof, encodeProofSignature } from '../services/zkService.js';
 import { decodeHexToAscii } from '../utils/helpers.js';
@@ -36,6 +36,9 @@ router.post('/', async (req, res) => {
         schemeId,
         ephemeralPub,
         metadata,
+        tokenType = 'ETH', // 'ETH', 'ERC20', 'ERC721'
+        tokenAddress,
+        tokenId
     } = req.body;
 
     // ── 1. Validate input ────────────────────────────────────────────────────
@@ -78,32 +81,59 @@ router.post('/', async (req, res) => {
         const factory = new ethers.Contract(factoryAddress, factoryABI, signer);
         const entryPoint = new ethers.Contract(ENTRY_POINT, entryPointABI, signer);
 
-        // ── 3. Balance check ────────────────────────────────────────────────
-        const transferValue = BigInt(valueString);
-        const aaBalance = await provider.getBalance(senderStealthAddress);
+        // ── 3. Balance check (ETH ONLY) ────────────────────────────────────────────────
+        if (tokenType === 'ETH') {
+            const transferValue = BigInt(valueString);
+            const aaBalance = await provider.getBalance(senderStealthAddress);
 
-        if (aaBalance < transferValue) {
-            return res.status(400).json({
-                error: 'INSUFFICIENT_BALANCE',
-                have: ethers.formatEther(aaBalance),
-                need: ethers.formatEther(transferValue),
-            });
+            if (aaBalance < transferValue) {
+                return res.status(400).json({
+                    error: 'INSUFFICIENT_BALANCE',
+                    have: ethers.formatEther(aaBalance),
+                    need: ethers.formatEther(transferValue),
+                });
+            }
         }
 
         // ── 4. Build calldata ────────────────────────────────────────────────
         let callData;
         try {
-            console.log('[Step 2] Building calldata…');
+            console.log(`[Step 2] Building calldata for ${tokenType} transfer…`);
             const stealthInterface = new ethers.Interface(stealthABI);
-            callData = stealthInterface.encodeFunctionData('executeStealthTransfer', [
-                announcerAddress,
-                schemeId,
-                recipientAbstractAccount,
-                valueString,
-                ephemeralPub,
-                metadata,
-                { a: auth.a, b: auth.b, c: auth.c },
-            ]);
+            
+            if (tokenType === 'ERC20') {
+                callData = stealthInterface.encodeFunctionData('executeERC20StealthTransfer', [
+                    announcerAddress,
+                    schemeId,
+                    tokenAddress,
+                    recipientAbstractAccount,
+                    valueString,
+                    ephemeralPub,
+                    metadata,
+                    { a: auth.a, b: auth.b, c: auth.c },
+                ]);
+            } else if (tokenType === 'ERC721') {
+                callData = stealthInterface.encodeFunctionData('executeERC721StealthTransfer', [
+                    announcerAddress,
+                    schemeId,
+                    tokenAddress,
+                    recipientAbstractAccount,
+                    tokenId,
+                    ephemeralPub,
+                    metadata,
+                    { a: auth.a, b: auth.b, c: auth.c },
+                ]);
+            } else {
+                callData = stealthInterface.encodeFunctionData('executeStealthTransfer', [
+                    announcerAddress,
+                    schemeId,
+                    recipientAbstractAccount,
+                    valueString,
+                    ephemeralPub,
+                    metadata,
+                    { a: auth.a, b: auth.b, c: auth.c },
+                ]);
+            }
         } catch (err) {
             throw new Error('CALLDATA_BUILD_FAILED: ' + err.message);
         }
@@ -152,7 +182,7 @@ router.post('/', async (req, res) => {
             preVerificationGas: 100_000,
             maxFeePerGas: maxFeePerGas.toString(),
             maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
-            paymasterAndData: '0x',
+            paymasterAndData: PAYMASTER_ADDRESS || '0x',
             signature,
         };
 

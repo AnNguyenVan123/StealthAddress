@@ -299,17 +299,46 @@ export default function Wallet({ meta, setMeta }) {
                                                     value={w.sendRecipientIndexHash || ""}
                                                     onChange={(e) => updateWalletField(i, "sendRecipientIndexHash", e.target.value)}
                                                 />
+                                                <div className="flex gap-2 mb-2">
+                                                    <select
+                                                        className="w-1/3 px-3 py-2 bg-black/40 border border-white/10 rounded-lg focus:ring-1 focus:ring-purple-500 outline-none text-xs text-gray-300"
+                                                        value={w.sendTokenType || "ETH"}
+                                                        onChange={(e) => updateWalletField(i, "sendTokenType", e.target.value)}
+                                                    >
+                                                        <option value="ETH">ETH</option>
+                                                        <option value="ERC20">ERC-20</option>
+                                                        <option value="ERC721">ERC-721 (NFT)</option>
+                                                    </select>
+                                                    {w.sendTokenType !== "ETH" && (
+                                                        <input
+                                                            className="flex-1 px-3 py-2 bg-black/40 border border-white/10 rounded-lg focus:ring-1 focus:ring-purple-500 outline-none text-xs text-gray-300 placeholder-gray-600"
+                                                            placeholder="Token Contract Address"
+                                                            value={w.sendTokenAddress || ""}
+                                                            onChange={(e) => updateWalletField(i, "sendTokenAddress", e.target.value)}
+                                                        />
+                                                    )}
+                                                </div>
                                                 <div className="flex gap-2">
-                                                    <input
-                                                        type="number"
-                                                        className="flex-1 px-3 py-2 bg-black/40 border border-white/10 rounded-lg focus:ring-1 focus:ring-purple-500 outline-none text-xs text-gray-300 placeholder-gray-600"
-                                                        placeholder="Amount ETH"
-                                                        value={w.sendAmount || ""}
-                                                        onChange={(e) => updateWalletField(i, "sendAmount", e.target.value)}
-                                                    />
+                                                    {w.sendTokenType !== "ERC721" ? (
+                                                        <input
+                                                            type="number"
+                                                            className="flex-1 px-3 py-2 bg-black/40 border border-white/10 rounded-lg focus:ring-1 focus:ring-purple-500 outline-none text-xs text-gray-300 placeholder-gray-600"
+                                                            placeholder="Amount"
+                                                            value={w.sendAmount || ""}
+                                                            onChange={(e) => updateWalletField(i, "sendAmount", e.target.value)}
+                                                        />
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            className="flex-1 px-3 py-2 bg-black/40 border border-white/10 rounded-lg focus:ring-1 focus:ring-purple-500 outline-none text-xs text-gray-300 placeholder-gray-600"
+                                                            placeholder="Token ID"
+                                                            value={w.sendTokenId || ""}
+                                                            onChange={(e) => updateWalletField(i, "sendTokenId", e.target.value)}
+                                                        />
+                                                    )}
                                                     <button
                                                         onClick={() => handleSend(i)}
-                                                        disabled={sendingIndex === i || !w.sendScanPub || !w.sendSpendPub || !w.sendRecipientIndexHash || !w.sendAmount}
+                                                        disabled={sendingIndex === i || !w.sendScanPub || !w.sendSpendPub || !w.sendRecipientIndexHash || (w.sendTokenType !== "ERC721" && !w.sendAmount) || (w.sendTokenType === "ERC721" && !w.sendTokenId)}
                                                         className="px-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                                     >
                                                         {sendingIndex === i ? (sendProgress || "...") : "Send ZKP"}
