@@ -2,10 +2,11 @@ import { useState } from "react"
 import Wallet from "./components/Wallet"
 import Send from "./components/Send"
 import Recovery from "./components/Recovery"
+import EnsRegister from "./components/EnsRegister"
 
 function App() {
   const [meta, setMeta] = useState(null)
-  const [activeTab, setActiveTab] = useState("wallet") // wallet, transfer, recovery
+  const [activeTab, setActiveTab] = useState("wallet") // wallet, transfer, recovery, ens
 
   return (
     <div className="min-h-screen bg-[#0d0d12] text-white selection:bg-purple-500/30">
@@ -37,6 +38,11 @@ function App() {
               className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ease-out ${activeTab === "recovery" ? "bg-white/10 text-white shadow-lg scale-100" : "text-gray-400 hover:text-white hover:bg-white/5 scale-95"}`}>
                 Security Center
             </button>
+            <button 
+              onClick={() => setActiveTab("ens")}
+              className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ease-out ${activeTab === "ens" ? "bg-white/10 text-white shadow-lg scale-100" : "text-gray-400 hover:text-white hover:bg-white/5 scale-95"}`}>
+                🔍 ENS
+            </button>
           </div>
         </div>
 
@@ -61,6 +67,10 @@ function App() {
 
           {activeTab === "recovery" && (
             <Recovery meta={meta} />
+          )}
+
+          {activeTab === "ens" && (
+            <EnsRegister meta={meta} />
           )}
         </div>
       </div>
