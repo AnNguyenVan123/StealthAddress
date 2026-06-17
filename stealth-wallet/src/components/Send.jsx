@@ -1,9 +1,10 @@
-import { useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useSend } from "../hooks/useSend";
 import { useEnsResolver } from "../hooks/useEnsResolver";
+import { formatError } from "../utils/errors";
 
-export default function Send() {
+export default function Send({ meta, stealthState }) {
     const {
         scanPub, setScanPub,
         spendPub, setSpendPub,
@@ -17,6 +18,115 @@ export default function Send() {
         send,
     } = useSend();
 
+    const { stealthWallets, sendFromWallet, sendingIndex, sendProgress } = stealthState || {};
+
+    const [fundingSource, setFundingSource] = useState("metamask");
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+    const [selectedAssetId, setSelectedAssetId] = useState("ETH");
+    const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
+    const assetDropdownRef = useRef(null);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setDropdownOpen(false);
+            }
+            if (assetDropdownRef.current && !assetDropdownRef.current.contains(event.target)) {
+                setAssetDropdownOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const ICONS = {
+        wallet: <svg className="w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
+        stealth: <svg className="w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+        eth: <svg className="w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m11.999 3.141-8.46 14.017L11.999 22l8.46-4.842L11.999 3.141z"/><path d="m11.999 15.632-8.46-4.842L11.999 6l8.46 4.79-8.46 4.842z"/></svg>,
+        coin: <svg className="w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>,
+        nft: <svg className="w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
+        custom: <svg className="w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    };
+
+    // Compute valid funding options
+    const sourceOptions = [
+        { value: "metamask", label: "Connected Public Wallet (MetaMask)", icon: ICONS.wallet }
+    ];
+    if (stealthWallets) {
+        stealthWallets.forEach((w, i) => {
+            const bal = parseFloat(w.balance || "0");
+            const hasTokens = w.tokenBalances && w.tokenBalances.length > 0;
+            if (bal > 0 || hasTokens) {
+                sourceOptions.push({
+                    value: i.toString(),
+                    label: `Stealth Account #${i + 1} (${bal.toFixed(5)} ETH)`,
+                    icon: ICONS.stealth
+                });
+            }
+        });
+    }
+    const selectedOption = sourceOptions.find(o => o.value === fundingSource) || sourceOptions[0];
+
+    // Compute available assets based on funding source
+    const availableAssets = [];
+    if (fundingSource === "metamask") {
+        availableAssets.push({ id: "ETH", type: "ETH", label: "ETH (Ethereum)", address: "", icon: ICONS.eth });
+        availableAssets.push({ id: "CUSTOM_ERC20", type: "ERC20", label: "Custom ERC-20 Token", address: "", icon: ICONS.custom });
+        availableAssets.push({ id: "CUSTOM_ERC721", type: "ERC721", label: "Custom ERC-721 NFT", address: "", icon: ICONS.nft });
+    } else {
+        const wIndex = parseInt(fundingSource, 10);
+        const wallet = stealthWallets && stealthWallets[wIndex];
+        if (wallet) {
+            availableAssets.push({
+                id: "ETH",
+                type: "ETH",
+                label: `ETH (Bal: ${parseFloat(wallet.balance || "0").toFixed(5)})`,
+                address: "",
+                icon: ICONS.eth
+            });
+            if (wallet.tokenBalances) {
+                wallet.tokenBalances.forEach(t => {
+                    availableAssets.push({
+                        id: `ERC20-${t.address}`,
+                        type: "ERC20",
+                        label: `${t.symbol} (Bal: ${t.balance})`,
+                        address: t.address,
+                        icon: ICONS.coin
+                    });
+                });
+            }
+            availableAssets.push({ id: "CUSTOM_ERC20", type: "ERC20", label: "Custom ERC-20 Token", address: "", icon: ICONS.custom });
+            availableAssets.push({ id: "CUSTOM_ERC721", type: "ERC721", label: "Custom ERC-721 NFT", address: "", icon: ICONS.nft });
+        }
+    }
+
+    const selectedAsset = availableAssets.find(a => a.id === selectedAssetId) || availableAssets[0];
+
+    // Reset asset selection when funding source changes
+    useEffect(() => {
+        setSelectedAssetId("ETH");
+        setTokenType("ETH");
+        setTokenAddress("");
+    }, [fundingSource, setTokenType, setTokenAddress]);
+
+    const handleAssetChange = (id) => {
+        setSelectedAssetId(id);
+        const asset = availableAssets.find(a => a.id === id);
+        if (asset) {
+            setTokenType(asset.type);
+            if (asset.id.startsWith("ERC20-")) {
+                setTokenAddress(asset.address);
+            } else {
+                setTokenAddress("");
+            }
+        }
+        setAssetDropdownOpen(false);
+    };
+
+    const isCustomAsset = selectedAssetId.startsWith("CUSTOM_");
+
     // Called when ENS resolves or clears
     const handleEnsResolved = useCallback((result) => {
         if (result) {
@@ -24,7 +134,7 @@ export default function Send() {
             setSpendPub(result.spendPub);
             setRecipientIndexHash(result.indexHash);
         } else {
-            // Only clear if previously auto-filled (optional: you can remove these if you want manual input to persist)
+            // Only clear if previously auto-filled (optional)
         }
     }, [setScanPub, setSpendPub, setRecipientIndexHash]);
 
@@ -40,7 +150,34 @@ export default function Send() {
     async function handleSend() {
         const toastId = toast.loading("Preparing stealth payment...");
         try {
-            const txHash = await send();
+            let txHash;
+            if (fundingSource === "metamask") {
+                txHash = await send();
+            } else {
+                const wIndex = parseInt(fundingSource, 10);
+                txHash = await sendFromWallet(
+                    wIndex, 
+                    { scanPub, spendPub, indexHash: recipientIndexHash },
+                    { tokenType, tokenAddress, tokenId, amount }
+                );
+            }
+
+            // Log local activity
+            try {
+                const historyStr = localStorage.getItem("stealth_activity");
+                const history = historyStr ? JSON.parse(historyStr) : [];
+                history.push({
+                    timestamp: Date.now(),
+                    recipient: ensResolved ? ensResolved.ensName : scanPub,
+                    amount: tokenType === "ERC721" ? `NFT #${tokenId}` : amount,
+                    tokenSymbol: tokenType === "ETH" ? "ETH" : "Tokens",
+                    txHash: txHash
+                });
+                localStorage.setItem("stealth_activity", JSON.stringify(history));
+            } catch (e) {
+                console.error("Failed to save local activity", e);
+            }
+
             toast.success("Stealth payment sent!", {
                 id: toastId,
                 duration: 5000,
@@ -49,58 +186,97 @@ export default function Send() {
             console.log("Announce tx:", txHash);
         } catch (err) {
             console.error(err);
-            toast.error(err.message || "Transaction failed.", { id: toastId });
+            toast.error(formatError(err), { id: toastId });
         }
     }
 
     const isManualMode = !ensResolved;
+    const isCurrentlySending = fundingSource === "metamask" ? isSending : (sendingIndex !== null);
+    const currentProgress = fundingSource === "metamask" ? progress : sendProgress;
 
     return (
         <div className="w-full max-w-xl mx-auto animate-in fade-in zoom-in-95">
-            <Toaster position="top-center" reverseOrder={false}
-                toastOptions={{
-                    style: {
-                        background: '#1f2022',
-                        color: '#fff',
-                        border: '1px solid #333'
-                    }
-                }}
-            />
+            <Toaster position="bottom-right" reverseOrder={false} />
 
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-                {/* Decorative background */}
-                <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-blue-500/20 rounded-full blur-[60px]" />
-                <div className="absolute bottom-[-60px] left-[-30px] w-40 h-40 bg-purple-500/10 rounded-full blur-[50px]" />
-
-                <h3 className="text-3xl font-extrabold mb-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                    Direct External Transfer
+            <div className="glass-panel border-purple-500/20 rounded-3xl p-8 shadow-[0_0_30px_rgba(0,0,0,0.5)] relative overflow-hidden">
+                
+                <h3 className="text-2xl font-extrabold mb-2 text-slate-200 tracking-tight font-orbitron">
+                    Direct Transfer
                 </h3>
-                <p className="text-sm text-gray-400 mb-8 max-w-sm">
-                    Fund a recipient's Stealth Abstract Account directly from your MetaMask.
+                <p className="text-sm text-slate-400 mb-8 leading-relaxed">
+                    Fund a recipient's Stealth Abstract Account privately from your wallet.
                 </p>
 
-                <div className="space-y-5 relative z-10">
+                <div className="space-y-6 relative z-10">
+
+                    {/* ── Funding Source ── */}
+                    <div className="relative z-50" ref={dropdownRef}>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                            Funding Source
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => setDropdownOpen(!dropdownOpen)}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl outline-none text-sm font-medium text-slate-300 shadow-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all hover:border-slate-600 hover:shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                        >
+                            <span className="flex items-center gap-3">
+                                {selectedOption.icon}
+                                <span>{selectedOption.label}</span>
+                            </span>
+                            <span className={`text-slate-500 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                            </span>
+                        </button>
+
+                        {dropdownOpen && (
+                            <div className="absolute w-full mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.8)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                                {sourceOptions.map((opt) => (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => {
+                                            setFundingSource(opt.value);
+                                            setDropdownOpen(false);
+                                        }}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-all text-left ${
+                                            fundingSource === opt.value 
+                                            ? "bg-purple-900/40 text-purple-300 font-semibold" 
+                                            : "hover:bg-slate-700 text-slate-400"
+                                        }`}
+                                    >
+                                        {opt.icon}
+                                        {opt.label}
+                                        {fundingSource === opt.value && (
+                                            <span className="ml-auto text-amber-500">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     {/* ── ENS Resolution ── */}
                     <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
                             <span>Recipient</span>
-                            <span className="text-[10px] normal-case text-blue-400 font-normal border border-blue-400/30 rounded px-1.5 py-0.5 bg-blue-400/5">
-                                ENS or manual
+                            <span className="normal-case text-indigo-500 font-medium border border-indigo-200 rounded-md px-1.5 py-0.5 bg-indigo-50">
+                                ENS or Manual
                             </span>
                         </label>
 
                         {/* ENS Input */}
                         <div className="relative">
                             <input
-                                className={`w-full px-4 py-3 pr-10 bg-black/40 border rounded-xl outline-none text-sm font-mono placeholder-gray-600 transition-all ${
+                                className={`w-full px-4 py-3 pr-10 bg-slate-900/50 border rounded-xl outline-none text-sm font-mono placeholder-slate-600 transition-all shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
                                     ensStatus === "resolved"
-                                        ? "border-green-500/60 text-green-300 focus:ring-1 focus:ring-green-500"
+                                        ? "border-emerald-500/50 text-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                                         : ensStatus === "error"
-                                        ? "border-red-500/60 text-red-300 focus:ring-1 focus:ring-red-500"
-                                        : "border-white/10 text-white focus:ring-1 focus:ring-blue-500"
+                                        ? "border-red-500/50 text-red-400 focus:ring-2 focus:ring-red-500/20"
+                                        : "border-slate-700 text-slate-200 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                                 }`}
-                                placeholder="alice.eth  —  or fill fields manually below"
+                                placeholder="alice.eth — or fill fields manually"
                                 value={ensInput}
                                 onChange={e => handleEnsInput(e.target.value)}
                                 id="ens-input"
@@ -109,26 +285,30 @@ export default function Send() {
                             {/* Status icon */}
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-base pointer-events-none">
                                 {ensStatus === "resolving" && (
-                                    <span className="inline-block animate-spin h-4 w-4 border-2 border-blue-400 border-t-transparent rounded-full" />
+                                    <span className="inline-block animate-spin h-4 w-4 border-2 border-indigo-400 border-t-transparent rounded-full" />
                                 )}
                                 {ensStatus === "resolved" && <span>✅</span>}
                                 {ensStatus === "error" && <span>❌</span>}
                                 {ensStatus === "idle" && ensInput === "" && (
-                                    <span className="text-gray-600 text-sm">🔍</span>
+                                    <span className="text-slate-400 text-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                    </span>
                                 )}
                             </span>
                         </div>
 
                         {/* ENS resolved badge */}
                         {ensStatus === "resolved" && ensResolved && (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-green-400 bg-green-400/5 border border-green-400/20 rounded-lg px-3 py-2">
-                                <span>🎯</span>
+                            <div className="mt-3 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-500/30 rounded-lg px-3 py-2.5">
+                                <span className="text-emerald-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                </span>
                                 <span className="font-mono">Resolved: <span className="font-bold">{ensResolved.ensName}</span></span>
-                                <span className="text-gray-500">→</span>
-                                <span className="font-mono truncate text-green-300/70">{ensResolved.address.slice(0, 10)}...{ensResolved.address.slice(-6)}</span>
+                                <span className="text-emerald-500/50">→</span>
+                                <span className="font-mono truncate text-emerald-500/80">{ensResolved.address.slice(0, 10)}...{ensResolved.address.slice(-6)}</span>
                                 <button
                                     onClick={clearEns}
-                                    className="ml-auto text-gray-500 hover:text-red-400 transition-colors"
+                                    className="ml-auto text-emerald-400 hover:text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/40 px-1.5 py-0.5 rounded transition-colors"
                                     title="Clear ENS"
                                 >✕</button>
                             </div>
@@ -136,29 +316,32 @@ export default function Send() {
 
                         {/* ENS error badge */}
                         {ensStatus === "error" && (
-                            <div className="mt-2 text-xs text-red-400 bg-red-400/5 border border-red-400/20 rounded-lg px-3 py-2 leading-relaxed">
-                                ⚠️ {ensError}
+                            <div className="mt-3 text-xs text-red-400 bg-red-900/20 border border-red-500/30 rounded-lg px-3 py-2.5 flex items-start gap-2">
+                                <span className="text-red-500 mt-0.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                </span>
+                                {ensError}
                             </div>
                         )}
                     </div>
 
                     {/* ── Divider ── */}
-                    <div className="flex items-center gap-3 py-1">
-                        <div className="flex-1 h-px bg-white/5" />
-                        <span className="text-[10px] text-gray-600 uppercase tracking-widest">
-                            {ensResolved ? "auto-filled from ENS" : "or enter manually"}
+                    <div className="flex items-center gap-3 py-2">
+                        <div className="flex-1 h-px bg-slate-700" />
+                        <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest bg-slate-900 px-2 rounded">
+                            {ensResolved ? "Auto-filled from ENS" : "Or enter manually"}
                         </span>
-                        <div className="flex-1 h-px bg-white/5" />
+                        <div className="flex-1 h-px bg-slate-700" />
                     </div>
 
-                    {/* ── Manual Key Fields (always visible, auto-filled by ENS) ── */}
-                    <div className={`space-y-4 transition-opacity duration-300 ${ensResolved ? "opacity-60" : "opacity-100"}`}>
+                    {/* ── Manual Key Fields ── */}
+                    <div className={`space-y-4 transition-opacity duration-300 ${ensResolved ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
                         <div>
-                            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
                                 Recipient Scan Public Key
                             </label>
                             <input
-                                className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
+                                className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none text-sm font-mono text-slate-200 placeholder-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all"
                                 placeholder="0x04..."
                                 value={scanPub}
                                 onChange={e => { setScanPub(e.target.value); clearEns(); }}
@@ -167,11 +350,11 @@ export default function Send() {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
                                 Recipient Spend Public Key
                             </label>
                             <input
-                                className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
+                                className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none text-sm font-mono text-slate-200 placeholder-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all"
                                 placeholder="0x04..."
                                 value={spendPub}
                                 onChange={e => { setSpendPub(e.target.value); clearEns(); }}
@@ -180,12 +363,12 @@ export default function Send() {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                                Recipient Identity Hash (Index Hash)
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                                Recipient Identity Hash (Index)
                             </label>
                             <input
                                 type="text"
-                                className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-blue-300 placeholder-gray-600 transition-all"
+                                className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none text-sm font-mono text-slate-200 placeholder-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all"
                                 placeholder="0x..."
                                 value={recipientIndexHash}
                                 onChange={e => { setRecipientIndexHash(e.target.value); clearEns(); }}
@@ -194,101 +377,140 @@ export default function Send() {
                         </div>
                     </div>
 
+                    {/* ── Divider ── */}
+                    <div className="h-px bg-slate-700 my-6" />
+
                     {/* ── Token Type & Amount ── */}
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                            Token Type
-                        </label>
-                        <select
-                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white transition-all mb-5"
-                            value={tokenType}
-                            onChange={(e) => setTokenType(e.target.value)}
-                        >
-                            <option value="ETH">ETH</option>
-                            <option value="ERC20">ERC-20</option>
-                            <option value="ERC721">ERC-721 (NFT)</option>
-                        </select>
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-1 relative z-40" ref={assetDropdownRef}>
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                                    Asset to Send
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
+                                    className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg outline-none text-sm font-medium text-slate-300 shadow-[0_0_10px_rgba(0,0,0,0.3)] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all hover:border-slate-600 hover:shadow"
+                                >
+                                    <span className="flex items-center gap-2 truncate">
+                                        {selectedAsset?.icon}
+                                        <span className="truncate">{selectedAsset?.label}</span>
+                                    </span>
+                                    <span className={`text-slate-500 transition-transform duration-200 flex-shrink-0 ${assetDropdownOpen ? "rotate-180" : ""}`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                    </span>
+                                </button>
+
+                                {assetDropdownOpen && (
+                                    <div className="absolute left-0 w-max min-w-[220px] mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.8)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                                        {availableAssets.map((opt) => (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                onClick={() => handleAssetChange(opt.id)}
+                                                className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-all text-left ${
+                                                    selectedAssetId === opt.id 
+                                                    ? "bg-purple-900/40 text-purple-300 font-semibold" 
+                                                    : "hover:bg-slate-700 text-slate-400"
+                                                }`}
+                                            >
+                                                {opt.icon}
+                                                {opt.label}
+                                                {selectedAssetId === opt.id && (
+                                                    <span className="ml-auto text-amber-500">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                                    </span>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="col-span-2">
+                                {tokenType === "ERC721" ? (
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                                            Token ID
+                                        </label>
+                                        <input
+                                            className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none text-sm font-mono text-slate-200 placeholder-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all"
+                                            placeholder="e.g. 42"
+                                            value={tokenId}
+                                            onChange={e => setTokenId(e.target.value)}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                                            Transfer Amount
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                className="w-full px-3 py-2.5 pl-8 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none text-base font-bold text-amber-500 font-orbitron placeholder-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all"
+                                                placeholder="0.00"
+                                                value={amount}
+                                                onChange={e => setAmount(e.target.value)}
+                                            />
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 font-bold">Ξ</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
 
                         {(tokenType === "ERC20" || tokenType === "ERC721") && (
-                            <div className="mb-5">
-                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
                                     Token Contract Address
                                 </label>
                                 <input
-                                    className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
+                                    className={`w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none text-sm font-mono text-slate-200 placeholder-slate-600 shadow-[0_0_10px_rgba(0,0,0,0.3)] transition-all ${!isCustomAsset ? 'opacity-70 bg-slate-800' : ''}`}
                                     placeholder="0x..."
                                     value={tokenAddress}
                                     onChange={e => setTokenAddress(e.target.value)}
+                                    readOnly={!isCustomAsset}
                                 />
-                            </div>
-                        )}
-
-                        {tokenType === "ERC721" ? (
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                                    Token ID
-                                </label>
-                                <input
-                                    className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-sm font-mono text-white placeholder-gray-600 transition-all"
-                                    placeholder="e.g. 42"
-                                    value={tokenId}
-                                    onChange={e => setTokenId(e.target.value)}
-                                />
-                            </div>
-                        ) : (
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                                    Transfer Amount
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-lg font-bold text-white placeholder-gray-600 transition-all pl-12"
-                                        placeholder="0.00"
-                                        value={amount}
-                                        onChange={e => setAmount(e.target.value)}
-                                    />
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Ξ</span>
-                                </div>
                             </div>
                         )}
                     </div>
 
                     {/* ── Submit ── */}
-                    <div className="pt-4">
+                    <div className="pt-6">
                         <button
                             onClick={handleSend}
                             disabled={
-                                isSending ||
+                                isCurrentlySending ||
                                 !scanPub || !spendPub || !recipientIndexHash ||
                                 (tokenType !== "ERC721" && !amount) ||
                                 (tokenType !== "ETH" && !tokenAddress) ||
                                 (tokenType === "ERC721" && !tokenId) ||
                                 ensStatus === "resolving"
                             }
-                            className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-500/20 text-white font-bold tracking-wider uppercase rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 transform hover:scale-[1.01] active:scale-95"
+                            className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-900/50 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-bold tracking-widest font-orbitron rounded-xl transition-all flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(139,92,246,0.4)] hover:shadow-[0_0_25px_rgba(139,92,246,0.6)]"
                         >
-                            {isSending ? (
+                            {isCurrentlySending ? (
                                 <>
-                                    <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                                    {progress || "Broadcasting..."}
+                                    <span className="animate-spin h-4 w-4 border-2 border-white/40 border-t-white rounded-full" />
+                                    {currentProgress || "Broadcasting..."}
                                 </>
                             ) : ensStatus === "resolving" ? (
                                 <>
-                                    <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                                    <span className="animate-spin h-4 w-4 border-2 border-white/40 border-t-white rounded-full" />
                                     Resolving ENS...
                                 </>
                             ) : (
                                 <>
-                                    <span className="text-xl">🚀</span>
-                                    {ensResolved ? `Send to ${ensResolved.ensName}` : "Broadcast Stealth Payment"}
+                                    {ensResolved ? `Send to ${ensResolved.ensName}` : "Send Stealth Payment"}
                                 </>
                             )}
                         </button>
 
                         {/* ENS tip */}
-                        <p className="text-center text-[11px] text-gray-600 mt-3">
-                            💡 Recipients can register their stealth keys on ENS for easy discovery
+                        <p className="text-center text-[11px] text-slate-400 mt-4 flex items-center justify-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                            Recipients can register their stealth keys on ENS for easy discovery
                         </p>
                     </div>
                 </div>

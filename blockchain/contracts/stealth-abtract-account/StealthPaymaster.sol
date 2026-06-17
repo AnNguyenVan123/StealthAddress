@@ -5,7 +5,7 @@ interface IEntryPoint {
     function depositTo(address account) external payable;
 }
 
-contract OmniPaymaster {
+contract StealthPaymaster {
     address public immutable entryPoint;
 
     constructor(address _entryPoint) {

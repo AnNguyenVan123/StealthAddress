@@ -28,7 +28,6 @@ function treeHandler(req, res) {
     });
 }
 
-router.get('/', treeHandler);
 router.get('/tree', treeHandler);
 
 /**

@@ -11,7 +11,7 @@ interface ISMTVerifier {
 }
 
 /**
- * @title IncrementalMerkleTree
+ * @title StealthTreeManager
  * @dev The merkle tree structure is managed off-chain by the server.
  *      This contract stores the active root hash and leaf count, updated via ZK proof
  *      verified by the SMT update circuit (smt_update.circom).
@@ -22,7 +22,7 @@ interface ISMTVerifier {
  *      `initRoot(emptyTreeRoot)` once before any `updateRoot()` call so that
  *      the on-chain root matches the server's Poseidon empty-tree root.
  */
-contract IncrementalMerkleTree {
+contract StealthTreeManager {
     bytes32 public root;
     uint32 public nextIndex;
     ISMTVerifier public verifier;
@@ -40,7 +40,7 @@ contract IncrementalMerkleTree {
     }
 
     constructor(address _verifier) {
-        require(_verifier != address(0), "IncrementalMerkleTree: zero verifier");
+        require(_verifier != address(0), "StealthTreeManager: zero verifier");
         verifier = ISMTVerifier(_verifier);
     }
 
@@ -48,8 +48,8 @@ contract IncrementalMerkleTree {
      * @notice Set the initial Poseidon empty-tree root.
      */
     function initRoot(bytes32 _initialRoot) external {
-        require(root == bytes32(0), "IncrementalMerkleTree: already initialised");
-        require(_initialRoot != bytes32(0), "IncrementalMerkleTree: zero root");
+        require(root == bytes32(0), "StealthTreeManager: already initialised");
+        require(_initialRoot != bytes32(0), "StealthTreeManager: zero root");
         root = _initialRoot;
         emit RootInitialized(_initialRoot);
     }
@@ -60,7 +60,7 @@ contract IncrementalMerkleTree {
      *      this should require a signature from the leaf owner or be done at account creation.
      */
     function registerSocialContract(uint32 index, address socialContract) external {
-        require(socialContractMap[index] == address(0), "IncrementalMerkleTree: already registered");
+        require(socialContractMap[index] == address(0), "StealthTreeManager: already registered");
         socialContractMap[index] = socialContract;
         emit SocialContractRegistered(index, socialContract);
     }
@@ -81,8 +81,8 @@ contract IncrementalMerkleTree {
     ) external {
         // Enforce social recovery logic if this is an update to an existing leaf
         if (index < nextIndex) {
-            require(socialContractMap[index] != address(0), "IncrementalMerkleTree: social contract not setup");
-            require(msg.sender == socialContractMap[index], "IncrementalMerkleTree: unauthorized update");
+            require(socialContractMap[index] != address(0), "StealthTreeManager: social contract not setup");
+            require(msg.sender == socialContractMap[index], "StealthTreeManager: unauthorized update");
         }
 
         _verifyUpdateZKP(newRoot, newLeaf, index, auth);
@@ -113,11 +113,11 @@ contract IncrementalMerkleTree {
 
         require(
             address(verifier) != address(0),
-            "IncrementalMerkleTree: verifier not set"
+            "StealthTreeManager: verifier not set"
         );
         require(
             verifier.verifyProof(auth.a, auth.b, auth.c, publicSignals),
-            "IncrementalMerkleTree: invalid root update proof"
+            "StealthTreeManager: invalid root update proof"
         );
     }
 }

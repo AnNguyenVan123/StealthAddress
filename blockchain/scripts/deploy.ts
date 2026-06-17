@@ -44,7 +44,7 @@ async function main() {
     account,
   });
 
-  const poseidonReceipt = await publicClient.waitForTransactionReceipt({
+  const poseidonReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
     hash: poseidonHash,
   });
 
@@ -64,7 +64,7 @@ async function main() {
     account,
   });
 
-  const smtVerifierReceipt = await publicClient.waitForTransactionReceipt({
+  const smtVerifierReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
     hash: smtVerifierHash,
   });
 
@@ -72,11 +72,11 @@ async function main() {
   console.log(`SMTUpdateVerifier deployed at: ${smtVerifierAddress}`);
 
   // =========================
-  // 3. Deploy IncrementalMerkleTree (wired to SMTUpdateVerifier)
+  // 3. Deploy StealthTreeManager (wired to SMTUpdateVerifier)
   // =========================
-  console.log("Deploying IncrementalMerkleTree...");
+  console.log("Deploying StealthTreeManager...");
 
-  const imtArtifact = await hre.artifacts.readArtifact("IncrementalMerkleTree");
+  const imtArtifact = await hre.artifacts.readArtifact("StealthTreeManager");
 
   const imtHash = await walletClient.deployContract({
     abi: imtArtifact.abi,
@@ -85,12 +85,12 @@ async function main() {
     account,
   });
 
-  const imtReceipt = await publicClient.waitForTransactionReceipt({
+  const imtReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
     hash: imtHash,
   });
 
   const imtAddress = imtReceipt.contractAddress!;
-  console.log(`IncrementalMerkleTree deployed at: ${imtAddress}`);
+  console.log(`StealthTreeManager deployed at: ${imtAddress}`);
 
   // =========================
   // 3b. Initialize the on-chain root to match the server's Poseidon empty-tree root
@@ -114,8 +114,8 @@ async function main() {
     args: [emptyTreeRoot],
     account,
   });
-  await publicClient.waitForTransactionReceipt({ hash: initRootTxHash });
-  console.log(`IncrementalMerkleTree root initialised to: ${emptyTreeRoot}`);
+  await publicClient.waitForTransactionReceipt({ timeout: 600000, hash: initRootTxHash });
+  console.log(`StealthTreeManager root initialised to: ${emptyTreeRoot}`);
 
   // =========================
   // 4. Deploy Verifier (for stealth spend proofs)
@@ -130,7 +130,7 @@ async function main() {
     account,
   });
 
-  const verifierReceipt = await publicClient.waitForTransactionReceipt({
+  const verifierReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
     hash: verifierHash,
   });
 
@@ -153,7 +153,7 @@ async function main() {
     account,
   });
 
-  const factoryReceipt = await publicClient.waitForTransactionReceipt({
+  const factoryReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
     hash: factoryHash,
   });
 
@@ -174,7 +174,7 @@ async function main() {
     account,
   });
 
-  const announcerReceipt = await publicClient.waitForTransactionReceipt({
+  const announcerReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
     hash: announcerHash,
   });
 
@@ -182,12 +182,12 @@ async function main() {
   console.log(`ERC5564Announcer deployed at: ${announcerAddress}`);
 
   // =========================
-  // 7. Deploy OmniPaymaster
+  // 7. Deploy StealthPaymaster
   // =========================
-  console.log("Deploying OmniPaymaster...");
+  console.log("Deploying StealthPaymaster...");
   const entryPointAddress = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"; // Standard EntryPoint v0.6
   
-  const paymasterArtifact = await hre.artifacts.readArtifact("OmniPaymaster");
+  const paymasterArtifact = await hre.artifacts.readArtifact("StealthPaymaster");
 
   const paymasterHash = await walletClient.deployContract({
     abi: paymasterArtifact.abi,
@@ -196,12 +196,12 @@ async function main() {
     account,
   });
 
-  const paymasterReceipt = await publicClient.waitForTransactionReceipt({
+  const paymasterReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
     hash: paymasterHash,
   });
 
   const paymasterAddress = paymasterReceipt.contractAddress!;
-  console.log(`OmniPaymaster deployed at: ${paymasterAddress}`);
+  console.log(`StealthPaymaster deployed at: ${paymasterAddress}`);
 
   // Also deposit some ETH into the paymaster to sponsor transactions
   try {
@@ -209,11 +209,11 @@ async function main() {
         address: paymasterAddress,
         abi: paymasterArtifact.abi,
         functionName: "deposit",
-        value: 5000000000000000000n, // 5 ETH
+        value: 1000000000000000n, // 0.001 ETH
         account,
       });
-      await publicClient.waitForTransactionReceipt({ hash: depositHash });
-      console.log("Deposited 5 ETH to paymaster");
+      await publicClient.waitForTransactionReceipt({ timeout: 600000, hash: depositHash });
+      console.log("Deposited 0.001 ETH to paymaster");
   } catch (e) {
       console.log("Failed to deposit to paymaster:", e);
   }

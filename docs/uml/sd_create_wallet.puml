@@ -1,0 +1,78 @@
+@startuml sd_create_wallet
+!theme plain
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+skinparam ParticipantPadding 15
+skinparam sequenceArrowThickness 1.2
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+
+skinparam participant {
+    BackgroundColor #F8FBFF
+    BorderColor #2C6FAC
+}
+skinparam database {
+    BackgroundColor White
+    BorderColor #4A90D9
+}
+
+title Luồng Tạo Ví & Đăng ký Merkle Leaf
+
+actor "Người dùng" as User
+participant "Client\n(Wallet App)" as Client
+participant "Relayer Server" as Server
+database "Merkle DB" as DB
+participant "Smart Contract" as Chain
+
+== 1. Khởi tạo Khóa Ẩn danh ==
+
+User -> Client : Chọn "Tạo ví mới"
+activate Client
+
+Client -> Client : 1. Sinh Scan Key & Spend Key\n2. Tính toán Merkle Leaf (k)
+
+== 2. Yêu cầu Đăng ký Leaf ==
+
+Client -> Server : POST /leaves {leaf, address}
+activate Server
+
+Server -> Server : Kiểm tra tính đồng bộ & trạng thái Leaf
+alt Leaf đã tồn tại
+    Server --> Client : Trả về thông tin Leaf cũ (Bỏ qua chèn)
+else Leaf hợp lệ (Mới)
+
+    Server -> DB : Chèn Leaf & Cập nhật Root
+    activate DB
+    DB --> Server : Trả về Merkle Path (siblings)
+    deactivate DB
+
+    == 3. Cập nhật On-chain (ZKP) ==
+
+    Server -> Server : Sinh Bằng chứng ZKP\n(Mạch smt_update)
+    
+    Server -> Chain : Gửi TX updateRoot(newRoot, ZKP)
+    activate Chain
+    
+    alt TX Thành công
+        Chain --> Server : Trả về TX Hash
+    else TX Thất bại
+        Chain --> Server : Revert lỗi
+        Server -> DB : Rollback cập nhật Leaf
+    end
+    deactivate Chain
+end
+
+Server --> Client : Trả về kết quả (Index, Root, TX Hash)
+deactivate Server
+
+== 4. Hoàn tất & Lưu trữ ==
+
+Client -> Client : Lưu trữ Meta-address & Khóa riêng cục bộ
+Client --> User : Thông báo Tạo ví thành công
+deactivate Client
+
+@enduml

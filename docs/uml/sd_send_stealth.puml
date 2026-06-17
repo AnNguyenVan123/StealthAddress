@@ -1,0 +1,67 @@
+@startuml sd_send_stealth
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+skinparam ParticipantPadding 15
+skinparam sequenceArrowThickness 1.2
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+
+skinparam participant {
+    BackgroundColor #F8FBFF
+    BorderColor #2C6FAC
+}
+
+title Luồng Giao dịch Ẩn danh (Gửi / Chi tiêu)
+
+actor "Người gửi" as Alice
+participant "Client\n(Wallet App)" as Client
+participant "Hệ thống ENS" as ENS
+participant "Relayer Server" as Server
+participant "Hạ tầng ZKP\n(SnarkJS)" as ZK
+participant "Mạng Blockchain\n(ERC-4337 & HĐTM)" as Chain
+
+== 1. Khởi tạo Giao dịch ==
+Alice -> Client : Nhập tên người nhận (ENS) & Số tiền
+activate Client
+
+Client -> ENS : Tra cứu thông tin Meta-address
+activate ENS
+ENS --> Client : Dữ liệu khóa công khai của người nhận
+deactivate ENS
+
+Client -> Client : Tạo Địa chỉ Stealth đích (Dành riêng cho giao dịch này)
+
+== 2. Ủy thác Xử lý qua Relayer ==
+Client -> Server : Yêu cầu ủy thác giao dịch (Gửi UserOp)
+activate Server
+
+Server -> Server : Kiểm tra số dư & Tính hợp lệ
+
+== 3. Sinh Bằng chứng Không Kiến thức (ZKP) ==
+Server -> ZK : Yêu cầu sinh ZK Proof (Mạch stealth_spend)
+activate ZK
+ZK --> Server : Trả về Bằng chứng ZKP hợp lệ
+deactivate ZK
+
+== 4. Thực thi Giao dịch On-chain ==
+Server -> Server : Xây dựng gói UserOperation kèm ZKP
+Server -> Chain : Gửi giao dịch qua Paymaster (Tài trợ Gas)
+activate Chain
+
+Chain -> Chain : Xác thực ZKP & Thực thi chuyển tiền
+Chain -> Chain : Phát ra sự kiện Announcement
+
+Chain --> Server : Trả về Mã Giao dịch (TX Hash)
+deactivate Chain
+
+Server --> Client : Hoàn tất ủy thác (Mã TX Hash)
+deactivate Server
+
+Client --> Alice : Thông báo Giao dịch thành công
+deactivate Client
+
+@enduml

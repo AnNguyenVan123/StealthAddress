@@ -21,6 +21,7 @@ export default defineConfig({
       type: "http",
       url: process.env.SEPOLIA_RPC_URL!,
       accounts: [process.env.SEPOLIA_PRIVATE_KEY!],
+      gasMultiplier: 1.5,
     },
   },
 

@@ -1,41 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
-/* ── Global resets + Inter font ───────────────────────────────────── */
+/* ── Google Fonts: Orbitron & Exo 2 ───────────────────────────────────── */
+
+/* ── Global resets + Font assignments ────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
+:root {
+  /* Colors - OLED Dark Mode */
+  --bg-oled: #0b0f19; /* Deeper slate */
+  --bg-panel: #111827; /* slate-900 */
+  --text-main: #f8fafc; /* slate-50 */
+  --text-muted: #94a3b8; /* slate-400 */
+  --color-primary: #f59e0b; /* amber-500 */
+  --color-primary-glow: rgba(245, 158, 11, 0.5);
+  --color-cta: #8b5cf6; /* violet-500 */
+  --color-cta-glow: rgba(139, 92, 246, 0.5);
+}
+
 html {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background-color: #0d0d12;
-  color: #f1f1f1;
+  font-family: 'Exo 2', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-oled);
+  color: var(--text-main);
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+h1, h2, h3, h4, h5, h6, .font-orbitron {
+  font-family: 'Orbitron', 'Exo 2', sans-serif;
+  letter-spacing: 0.05em;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  /* Premium subtle grid background for web3 feel */
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 50px 50px;
+  background-position: center center;
 }
 
-/* ── Custom thin dark scrollbar ───────────────────────────────────── */
+/* ── Custom thin scrollbar ───────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--bg-oled);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.2);
 }
 
-/* ── animate-in utility (Tailwind doesn't ship this by default) ───── */
+/* ── animate-in utility ───── */
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -59,31 +85,68 @@ body {
 .zoom-in-95         { animation-name: zoom-in-95; }
 .duration-500       { animation-duration: 500ms; }
 
-/* ── Glassmorphism card shimmer effect ────────────────────────────── */
-.glass-card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* ── Gradient text helper ─────────────────────────────────────────── */
+/* ── Premium Effects ─────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #60a5fa 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #fbbf24 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* ── Pulse glow animation for balance display ─────────────────────── */
-@keyframes pulse-glow {
-  0%, 100% { text-shadow: 0 0 20px rgba(129, 140, 248, 0.3); }
-  50%       { text-shadow: 0 0 40px rgba(129, 140, 248, 0.6); }
+.gradient-text-cta {
+  background: linear-gradient(135deg, var(--color-cta) 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
-.pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
+
+.glow-primary {
+  box-shadow: 0 0 15px var(--color-primary-glow);
+}
+
+.glow-cta {
+  box-shadow: 0 0 15px var(--color-cta-glow);
+}
+
+.glass-panel {
+  background: rgba(17, 24, 39, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* ── Toast overrides ──────────────────────────────────────────────── */
 .react-hot-toast > div {
-  font-family: 'Inter', sans-serif !important;
+  font-family: 'Exo 2', sans-serif !important;
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 10px rgba(139, 92, 246, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0.75rem !important;
+}
+
+/* ── Slide in from right ──────────────────────────────────────────── */
+@keyframes slide-in-from-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.slide-in-from-right { animation-name: slide-in-from-right; }
+
+/* ── Status dot ping ─────────────────────────────────────────────── */
+@keyframes status-ping {
+  0%    { transform: scale(1);   opacity: 1; }
+  75%   { transform: scale(2.2); opacity: 0; }
+  100%  { transform: scale(2.2); opacity: 0; }
+}
+.status-ping {
+  animation: status-ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* ── Number counter roll-up ───────────────────────────────────────── */
+@keyframes count-up {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.count-up {
+  animation: count-up 0.4s ease-out both;
 }

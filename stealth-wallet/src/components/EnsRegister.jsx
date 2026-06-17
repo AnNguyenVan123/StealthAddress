@@ -8,14 +8,14 @@ const STEPS = ["commit", "commit-tx", "wait", "register", "records", "done"];
 function StepDot({ active, done, label }) {
     return (
         <div className="flex flex-col items-center gap-1">
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 ${
-                done  ? "bg-green-500 border-green-500 text-white" :
-                active? "bg-blue-500 border-blue-400 text-white animate-pulse" :
-                        "bg-transparent border-white/10 text-gray-600"
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all duration-300 ${
+                done  ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]" :
+                active? "bg-amber-500 border-amber-400 text-slate-900 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.5)]" :
+                        "bg-transparent border-slate-700 text-slate-500"
             }`}>
                 {done ? "✓" : ""}
             </div>
-            <span className="text-[10px] text-gray-500 uppercase tracking-wide whitespace-nowrap">{label}</span>
+            <span className="text-[9px] text-slate-500 uppercase tracking-widest whitespace-nowrap font-bold mt-1">{label}</span>
         </div>
     );
 }
@@ -31,16 +31,16 @@ function ProgressBar({ phase }) {
         { key: "done",      label: "Done" },
     ];
     return (
-        <div className="flex items-start gap-2 py-3">
+        <div className="flex items-start justify-center gap-1 py-3 w-full">
             {steps.map((s, i) => (
-                <div key={s.key} className="flex items-center gap-2">
+                <div key={s.key} className="flex items-center gap-1 flex-1">
                     <StepDot
                         active={STEPS[stepIndex] === s.key}
                         done={stepIndex > i || phase === "done"}
                         label={s.label}
                     />
                     {i < steps.length - 1 && (
-                        <div className={`flex-1 h-px w-8 mt-[-14px] transition-colors ${stepIndex > i ? "bg-green-500" : "bg-white/10"}`} />
+                        <div className={`flex-1 h-px mt-[-16px] transition-colors ${stepIndex > i ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-slate-800"}`} />
                     )}
                 </div>
             ))}
@@ -59,8 +59,12 @@ export default function EnsRegister({ meta }) {
         rentPrice,
         registeredName,
         error,
+        timeRemaining,
+        pendingReg,
         checkName,
-        register,
+        startCommit,
+        completeRegister,
+        cancelPending,
         reset,
     } = useEnsRegistration(meta);
 
@@ -72,41 +76,39 @@ export default function EnsRegister({ meta }) {
     }
 
     const normName   = normaliseName(name);
+    const isCommitting = phase === "committing";
     const isRegistering = phase === "registering";
     const canRegister   = phase === "available" && normName.length >= 3;
 
     return (
         <div className="w-full max-w-xl mx-auto animate-in fade-in zoom-in-95">
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-                {/* Decorative blobs */}
-                <div className="absolute top-[-40px] left-[-40px] w-40 h-40 bg-purple-500/10 rounded-full blur-[50px]" />
-                <div className="absolute bottom-[-30px] right-[-30px] w-32 h-32 bg-blue-500/10 rounded-full blur-[40px]" />
+            <div className="glass-panel border-purple-500/20 rounded-3xl p-8 shadow-[0_0_30px_rgba(0,0,0,0.5)] relative overflow-hidden">
 
                 {/* ── Header ── */}
                 <div className="relative z-10">
-                    <h3 className="text-2xl font-extrabold mb-1 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+                    <h3 className="text-2xl font-extrabold mb-2 text-slate-200 tracking-tight font-orbitron">
                         Register Your Stealth ENS
                     </h3>
-                    <p className="text-sm text-gray-400 mb-6">
-                        Get a <span className="text-white font-mono">.eth</span> domain linked to your stealth keys.
-                        Senders can then use <span className="text-blue-400 font-mono">yourname.eth</span> instead of raw public keys.
+                    <p className="text-sm text-slate-400 mb-8 leading-relaxed">
+                        Get a <span className="font-mono font-medium text-slate-300">.eth</span> domain linked to your stealth keys.
+                        Senders can then use <span className="font-mono font-medium text-purple-400">yourname.eth</span> instead of raw public keys.
                     </p>
 
                     {/* ── Done state ── */}
                     {phase === "done" && registeredName && (
-                        <div className="flex flex-col items-center gap-4 py-8">
+                        <div className="flex flex-col items-center gap-4 py-8 bg-emerald-900/10 border border-emerald-500/30 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.1)]">
                             <div className="text-6xl animate-bounce">🎉</div>
-                            <h4 className="text-xl font-bold text-green-400">Registration Complete!</h4>
-                            <div className="font-mono text-2xl bg-green-400/10 border border-green-400/20 rounded-2xl px-6 py-3 text-green-300">
+                            <h4 className="text-xl font-bold text-emerald-400 font-orbitron">Registration Complete!</h4>
+                            <div className="font-mono text-xl bg-slate-900/50 border border-emerald-500/50 rounded-xl px-6 py-3 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)] font-bold">
                                 {registeredName}
                             </div>
-                            <p className="text-sm text-gray-400 text-center max-w-xs">
+                            <p className="text-sm text-slate-400 text-center max-w-sm">
                                 Your stealth keys are now publicly linked to this domain.
-                                Senders can find you by typing <span className="text-green-400 font-mono">{registeredName}</span> in the Transfer page.
+                                Senders can find you by typing <span className="text-emerald-400 font-mono font-medium">{registeredName}</span> in the Transfer page.
                             </p>
                             <button
                                 onClick={reset}
-                                className="mt-2 px-6 py-2 text-sm text-gray-400 hover:text-white border border-white/10 hover:border-white/20 rounded-xl transition-all"
+                                className="mt-4 px-6 py-2.5 text-sm text-slate-900 bg-emerald-500 hover:bg-emerald-400 rounded-xl transition-all shadow-[0_0_10px_rgba(16,185,129,0.3)] font-bold font-orbitron tracking-widest uppercase"
                             >
                                 Register Another
                             </button>
@@ -115,51 +117,56 @@ export default function EnsRegister({ meta }) {
 
                     {/* ── Main form ── */}
                     {phase !== "done" && (
-                        <div className="space-y-4">
+                        <div className="space-y-6">
                             {/* Name input */}
                             <div>
-                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
                                     Choose Your Name
                                 </label>
                                 <div className="relative flex items-center">
                                     <input
-                                        className={`flex-1 px-4 py-3 pr-20 bg-black/40 border rounded-xl outline-none text-lg font-mono text-white placeholder-gray-600 transition-all ${
-                                            phase === "available" ? "border-green-500/60 focus:ring-1 focus:ring-green-500" :
-                                            phase === "taken"     ? "border-red-500/60 focus:ring-1 focus:ring-red-500" :
-                                            phase === "checking"  ? "border-blue-500/40" :
-                                                                     "border-white/10 focus:ring-1 focus:ring-purple-500"
+                                        className={`flex-1 px-4 py-3 pr-20 bg-slate-900/50 border rounded-xl outline-none text-lg font-mono text-slate-200 placeholder-slate-600 transition-all shadow-[0_0_10px_rgba(0,0,0,0.3)] ${
+                                            phase === "available" ? "border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20" :
+                                            phase === "taken"     ? "border-red-500/50 focus:ring-2 focus:ring-red-500/20" :
+                                            phase === "checking"  ? "border-purple-500/50 focus:ring-2 focus:ring-purple-500/20" :
+                                                                     "border-slate-700 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                                         }`}
                                         placeholder="yourname"
                                         value={name}
                                         onChange={handleNameChange}
-                                        disabled={isRegistering}
+                                        disabled={isCommitting || isRegistering || phase === "waiting"}
                                         maxLength={32}
                                         id="ens-name-input"
                                     />
-                                    <span className="absolute right-4 text-gray-500 font-mono text-sm pointer-events-none">.eth</span>
+                                    <span className="absolute right-4 text-slate-400 font-mono text-sm font-bold pointer-events-none">.eth</span>
                                 </div>
 
                                 {/* Availability status */}
-                                <div className="h-6 mt-1.5">
+                                <div className="h-6 mt-2">
                                     {phase === "checking" && (
-                                        <p className="text-xs text-blue-400 flex items-center gap-1">
-                                            <span className="inline-block animate-spin h-3 w-3 border border-blue-400 border-t-transparent rounded-full" />
+                                        <p className="text-xs text-purple-400 flex items-center gap-1.5 font-medium">
+                                            <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-purple-500 border-t-transparent rounded-full" />
                                             Checking availability...
                                         </p>
                                     )}
                                     {phase === "available" && (
-                                        <p className="text-xs text-green-400">
+                                        <p className="text-xs text-emerald-400 font-medium">
                                             ✅ <span className="font-mono font-bold">{normName}.eth</span> is available!
                                             {rentPrice !== null && (
-                                                <span className="ml-2 text-gray-400">
+                                                <span className="ml-2 text-slate-500 font-normal">
                                                     ~{parseFloat(ethers.formatEther(rentPrice)).toFixed(5)} ETH/year
                                                 </span>
                                             )}
                                         </p>
                                     )}
                                     {phase === "taken" && (
-                                        <p className="text-xs text-red-400">
-                                            ❌ <span className="font-mono">{normName}.eth</span> is already taken.
+                                        <p className="text-xs text-red-400 font-medium">
+                                            ❌ <span className="font-mono font-bold">{normName}.eth</span> is already taken.
+                                        </p>
+                                    )}
+                                    {phase === "waiting" && (
+                                        <p className="text-xs text-amber-400 font-medium animate-pulse">
+                                            ⏳ Commitment submitted for <span className="font-mono font-bold">{normName}.eth</span>.
                                         </p>
                                     )}
                                 </div>
@@ -167,63 +174,98 @@ export default function EnsRegister({ meta }) {
 
                             {/* Requirements */}
                             {!meta?.scanPub && (
-                                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl px-4 py-3 text-xs text-yellow-300">
+                                <div className="bg-amber-900/20 border border-amber-500/30 rounded-xl px-4 py-3 text-xs text-amber-400 font-medium">
                                     ⚠️ Please create or import your stealth wallet in the Dashboard first.
                                 </div>
                             )}
 
-                            {/* Progress section (during registration) */}
-                            {isRegistering && (
-                                <div className="bg-black/30 border border-white/5 rounded-2xl p-4">
+                            {/* Progress section (during commit or register) */}
+                            {(isCommitting || isRegistering || phase === "waiting") && (
+                                <div className="glass-panel border-purple-500/20 rounded-2xl p-5 shadow-[0_0_15px_rgba(139,92,246,0.1)] transition-all duration-300">
                                     <ProgressBar phase={progressPhase} />
-                                    <p className="text-sm text-blue-300 mt-2 font-mono">{progress}</p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Please approve both MetaMask transactions and keep this tab open during the 60s wait.
-                                    </p>
+                                    <div className="text-center mt-3">
+                                        <p className="text-sm text-purple-400 font-bold mb-1">{progress || (phase === "waiting" ? "Waiting for 60 seconds..." : "")}</p>
+                                        <p className="text-xs text-slate-500 font-medium">
+                                            {phase === "waiting" 
+                                                ? "ENS requires a 60s wait between commit and register to prevent frontrunning."
+                                                : "Please approve transactions in MetaMask and wait."}
+                                        </p>
+                                    </div>
                                 </div>
                             )}
 
                             {/* Error */}
                             {phase === "error" && error && (
-                                <div className="bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3 text-xs text-red-300 leading-relaxed">
+                                <div className="bg-red-900/20 border border-red-500/30 rounded-xl px-4 py-3 text-xs text-red-400 font-medium leading-relaxed">
                                     ❌ {error}
                                 </div>
                             )}
 
                             {/* What will be registered info box */}
-                            {canRegister && meta?.scanPub && (
-                                <div className="bg-purple-500/5 border border-purple-500/20 rounded-2xl p-4 text-xs text-gray-400 space-y-1">
-                                    <p className="text-purple-300 font-semibold mb-2">📦 What gets registered automatically:</p>
-                                    <p>• <span className="text-white font-mono">stealth.scanPub</span> → your scan public key</p>
-                                    <p>• <span className="text-white font-mono">stealth.spendPub</span> → your spend public key</p>
-                                    <p>• <span className="text-white font-mono">stealth.indexHash</span> → your index hash</p>
-                                    <p>• <span className="text-white font-mono">addr</span> → your MetaMask address</p>
+                            {canRegister && meta?.scanPub && !isCommitting && phase !== "waiting" && !isRegistering && (
+                                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 text-xs text-slate-400 space-y-1.5 shadow-inner">
+                                    <p className="text-amber-500 font-bold mb-2">📦 To be registered on-chain:</p>
+                                    <div className="grid grid-cols-1 gap-1 pl-1">
+                                        <p className="flex justify-between items-center"><span className="text-slate-500">scanPub:</span> <span className="font-mono font-medium text-slate-300">{shortenAddress(meta?.scanPub)}</span></p>
+                                        <p className="flex justify-between items-center"><span className="text-slate-500">spendPub:</span> <span className="font-mono font-medium text-slate-300">{shortenAddress(meta?.spendPub)}</span></p>
+                                        <p className="flex justify-between items-center"><span className="text-slate-500">indexHash:</span> <span className="font-mono font-medium text-slate-300">{shortenAddress(meta?.indexHash)}</span></p>
+                                    </div>
                                 </div>
                             )}
 
-                            {/* Register button */}
-                            <div className="pt-2">
-                                <button
-                                    onClick={register}
-                                    disabled={!canRegister || isRegistering || !meta?.scanPub}
-                                    className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 shadow-lg shadow-purple-500/20 text-white font-bold tracking-wider uppercase rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex justify-center items-center gap-3 transform hover:scale-[1.01] active:scale-95"
-                                >
-                                    {isRegistering ? (
-                                        <>
-                                            <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                                            {progressPhase === "wait" ? progress : "Registering..."}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-xl">🔖</span>
-                                            Register {normName ? `${normName}.eth` : "your name"}
-                                        </>
-                                    )}
-                                </button>
+                            {/* Action Buttons */}
+                            <div className="pt-4 space-y-3">
+                                {phase === "waiting" || pendingReg ? (
+                                    <>
+                                        <button
+                                            onClick={completeRegister}
+                                            disabled={timeRemaining > 0 || isRegistering}
+                                            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-slate-900 text-sm font-bold tracking-widest font-orbitron uppercase rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)]"
+                                        >
+                                            {isRegistering ? (
+                                                <>
+                                                    <span className="animate-spin h-4 w-4 border-2 border-slate-900/40 border-t-slate-900 rounded-full" />
+                                                    Registering...
+                                                </>
+                                            ) : timeRemaining > 0 ? (
+                                                `Wait ${timeRemaining}s to Register`
+                                            ) : (
+                                                `Complete Registration`
+                                            )}
+                                        </button>
+                                        {!isRegistering && (
+                                            <button
+                                                onClick={cancelPending}
+                                                className="w-full py-2.5 text-xs text-slate-500 hover:text-slate-300 font-bold uppercase tracking-widest"
+                                            >
+                                                Cancel and start over
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={startCommit}
+                                            disabled={!canRegister || isCommitting || !meta?.scanPub}
+                                            className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-900/50 disabled:text-slate-500 text-white text-sm font-bold tracking-widest font-orbitron uppercase rounded-xl transition-all disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
+                                        >
+                                            {isCommitting ? (
+                                                <>
+                                                    <span className="animate-spin h-4 w-4 border-2 border-white/40 border-t-white rounded-full" />
+                                                    Requesting...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    Request to Register {normName ? `${normName}.eth` : ""}
+                                                </>
+                                            )}
+                                        </button>
 
-                                <p className="text-center text-[11px] text-gray-600 mt-3">
-                                    Requires 3 MetaMask transactions + 65s wait · Sepolia network
-                                </p>
+                                        <p className="text-center text-[11px] text-slate-500 mt-3 font-medium uppercase tracking-widest">
+                                            Step 1 of 2 · Sepolia network
+                                        </p>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
@@ -232,3 +274,8 @@ export default function EnsRegister({ meta }) {
         </div>
     );
 }
+
+const shortenAddress = (address) => {
+    if (!address) return "";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};

@@ -1,0 +1,60 @@
+@startuml sd_scan_stealth
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+skinparam ParticipantPadding 15
+skinparam sequenceArrowThickness 1.2
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+
+skinparam participant {
+    BackgroundColor #F8FBFF
+    BorderColor #2C6FAC
+}
+
+title Luồng Quét & Phát hiện Tài sản Ẩn danh (Scan)
+
+actor "Người nhận" as Bob
+participant "Client\n(Wallet App)" as Client
+participant "Smart Contract\n(Announcer)" as Announcer
+participant "Blockchain RPC" as RPC
+
+== 1. Yêu cầu Quét ==
+Bob -> Client : Chọn "Quét tài sản" (Dùng Scan Key)
+activate Client
+
+Client -> RPC : Truy vấn số Block (Từ khối bắt đầu)
+activate RPC
+RPC --> Client : Khoảng Block cần quét
+deactivate RPC
+
+== 2. Tải Lịch sử Sự kiện ==
+Client -> Announcer : Truy vấn sự kiện Announcement (Logs)
+activate Announcer
+Announcer --> Client : Danh sách các giao dịch Stealth
+deactivate Announcer
+
+== 3. Nhận diện & Kiểm tra Số dư ==
+loop Mỗi sự kiện giao dịch
+    Client -> Client : Tính toán quyền sở hữu bằng Scan Key
+    
+    alt Thuộc về người nhận (Khớp khóa)
+        Client -> RPC : Truy vấn số dư địa chỉ (Balance)
+        activate RPC
+        RPC --> Client : Trả về số dư thực tế
+        deactivate RPC
+        
+        Client -> Client : Ghi nhận tài khoản ẩn danh tìm thấy
+    else Không khớp
+        Client -> Client : Bỏ qua
+    end
+end
+
+== 4. Cập nhật Giao diện ==
+Client --> Bob : Hiển thị danh sách Tài khoản Stealth & Số dư
+deactivate Client
+
+@enduml

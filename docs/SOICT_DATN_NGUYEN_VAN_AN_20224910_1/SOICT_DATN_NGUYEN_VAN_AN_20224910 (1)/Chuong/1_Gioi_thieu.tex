@@ -1,0 +1,37 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\section{Lý do chọn đề tài}
+Công nghệ Blockchain, đặc biệt là mạng lưới Ethereum, mang lại sự minh bạch, phi tập trung và tính toàn vẹn dữ liệu. Tuy nhiên, đặc tính sổ cái công khai (Public Ledger) lại bộc lộ điểm yếu về bảo mật thông tin người dùng. Mọi giao dịch, số dư và lịch sử tương tác của một địa chỉ ví (EOA) đều có thể dễ dàng bị truy vết và phân tích. Điều này hạn chế khả năng ứng dụng thực tiễn của blockchain trong các lĩnh vực tài chính, nơi quyền riêng tư cá nhân và doanh nghiệp là yêu cầu thiết yếu.
+
+Các giải pháp hiện tại như Tornado Cash (sử dụng ZK-SNARKs để trộn tiền) đã bị hạn chế hoặc cấm do thiếu tính tuân thủ pháp lý và dễ bị lạm dụng. Các giao thức Stealth Address truyền thống giải quyết được việc che giấu người nhận, nhưng lại gặp phải bài toán "Khởi động nguội" (Cold Start) khi người dùng không có phí mạng (Gas fee) để rút tiền khỏi địa chỉ ẩn danh mà không làm rò rỉ định danh từ ví chính.
+
+Xuất phát từ vấn đề nêu trên, đề tài \textbf{"Hệ thống giao dịch riêng tư dựa trên Stealth Address và Account Abstraction"} được thực hiện nhằm xây dựng một giao thức bảo mật dữ liệu giao dịch. Việc kết hợp tiêu chuẩn ERC-4337, cơ chế Stealth Address và Zero-Knowledge Proof (ZKP) cung cấp khả năng thực hiện giao dịch ẩn danh, ngắt liên kết (unlinkability) và tối ưu hóa trải nghiệm người dùng thông qua việc không phụ thuộc vào tiền điện tử gốc (ETH) để trả phí.
+
+\section{Mục tiêu nghiên cứu}
+Đồ án tập trung vào các mục tiêu cốt lõi sau:
+\begin{itemize}
+    \item Nghiên cứu và triển khai giao thức Dual-Key Stealth Address Protocol (DKSAP) trên nền tảng EVM.
+    \item Tích hợp tiêu chuẩn Account Abstraction (ERC-4337) để giải quyết bài toán trả phí Gas thông qua Paymaster.
+    \item Thiết kế và lập trình các mạch Zero-Knowledge Proof (sử dụng Circom) để chứng minh quyền sở hữu và chi tiêu tài sản mà không sử dụng chữ ký số truyền thống.
+    \item Xây dựng cơ chế Phục hồi xã hội (Social Recovery) dựa trên cấu trúc Merkle Tree để chống lại rủi ro mất khóa riêng tư.
+\end{itemize}
+
+\section{Đối tượng và Phạm vi nghiên cứu}
+\begin{itemize}
+    \item \textbf{Đối tượng nghiên cứu:} Các thuật toán mật mã học trên đường cong Elliptic (secp256k1), chuẩn ERC-4337, mạch ZK-SNARKs (Groth16) và cấu trúc dữ liệu Merkle Tree.
+    \item \textbf{Phạm vi ứng dụng:} Triển khai và kiểm thử hệ thống trên mạng lưới Ethereum Testnet (Sepolia). Các ứng dụng máy khách và máy chủ được xây dựng thông qua React, Node.js, Ethers.js và đóng gói triển khai bằng Docker.
+\end{itemize}
+
+\section{Bố cục của đồ án}
+Nội dung đồ án được chia thành 6 chương:
+\begin{itemize}
+    \item \textbf{Chương 1:} Giới thiệu tổng quan về đề tài, lý do chọn đề tài và mục tiêu.
+    \item \textbf{Chương 2:} Khảo sát các hệ thống hiện tại và phân tích yêu cầu bài toán.
+    \item \textbf{Chương 3:} Trình bày nền tảng lý thuyết mật mã học, kiến trúc Account Abstraction và ZK-Proof.
+    \item \textbf{Chương 4:} Phân tích thiết kế hệ thống, mô hình dữ liệu và triển khai thực nghiệm.
+    \item \textbf{Chương 5:} Đi sâu vào các giải pháp kỹ thuật và đóng góp nổi bật nhất của đồ án.
+    \item \textbf{Chương 6:} Tổng kết kết quả đạt được và định hướng phát triển tương lai.
+\end{itemize}
+
+\end{document}

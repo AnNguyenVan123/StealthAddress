@@ -10,14 +10,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ensdomains/ens-contracts": "^1.7.0",
+    "@ensdomains/ensjs": "^4.2.3",
     "@tailwindcss/vite": "^4.2.1",
     "buffer": "^6.0.3",
     "circomlibjs": "^0.1.7",
+    "clsx": "^2.1.1",
     "ethers": "^6.16.0",
+    "lucide-react": "^1.20.0",
     "process": "^0.11.10",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hot-toast": "^2.6.0",
+    "react-router-dom": "^7.18.0",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.2.1",
     "vite-plugin-node-polyfills": "^0.25.0"
   },

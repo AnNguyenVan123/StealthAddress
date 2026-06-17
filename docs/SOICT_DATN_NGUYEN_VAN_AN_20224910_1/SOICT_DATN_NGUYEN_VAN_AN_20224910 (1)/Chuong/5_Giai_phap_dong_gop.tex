@@ -1,0 +1,418 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+
+Trong quá trình nghiên cứu và phát triển hệ thống giao dịch riêng tư dựa trên Stealth Address và Account Abstraction, đồ án đối mặt với bốn thách thức kỹ thuật trọng yếu: bài toán khởi động nguội của tài khoản stealth, chi phí cập nhật Merkle Tree trên chuỗi, cơ chế phục hồi tài khoản ẩn danh, và vấn đề nhất quán trạng thái trong môi trường phân tán. Chương này trình bày chi tiết từng giải pháp được triển khai thực tế trong hệ thống, bao gồm cả thiết kế kỹ thuật, hợp đồng thông minh và kết quả đạt được.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Giải quyết Bài toán ``Khởi động Nguội'' qua Account Abstraction và Paymaster}
+\label{sec:cold_start}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Bài toán đặt ra}
+\label{subsec:cold_start_problem}
+
+Trong giao thức Stealth Address (ERC-5564)~\cite{erc5564}, người gửi chuyển tài sản đến một địa chỉ stealth mới được tính toán trước qua \texttt{CREATE2}~\cite{eip1014}. Địa chỉ này tồn tại ở trạng thái \textit{counterfactual}: hợp đồng Smart Account chưa được triển khai và số dư ETH bằng không.
+
+Khi người nhận muốn chi tiêu tài sản từ địa chỉ stealth này, họ phải đối mặt với vòng luẩn quẩn kinh điển:
+
+\begin{itemize}
+    \item Để thực hiện bất kỳ giao dịch nào, địa chỉ cần ETH để trả phí Gas.
+    \item Để có ETH, người dùng phải chuyển ETH từ một ví bên ngoài.
+    \item Nếu giao dịch chuyển ETH phát sinh từ ví chính của người dùng, dữ liệu giao dịch trên chuỗi sẽ tạo ra một \textbf{liên kết quan sát được} giữa danh tính ví chính và địa chỉ stealth.
+\end{itemize}
+
+Hậu quả là tính không liên kết (\textit{unlinkability}), vốn là thuộc tính bảo mật cốt lõi của giao thức Stealth Address, bị phá vỡ hoàn toàn. Đây là hạn chế phổ biến của các triển khai Stealth Address truyền thống khi chưa tích hợp Account Abstraction.
+
+\subsection{Phân tích Kỹ thuật}
+\label{subsec:cold_start_analysis}
+
+Bài toán có tính chất ``gà và trứng'': để triển khai \texttt{StealthAccount}, cần phí Gas; để có phí Gas, cần tương tác với ví chính; tương tác với ví chính tiết lộ danh tính. Không có giải pháp nào trong mô hình EOA truyền thống có thể phá vỡ vòng này mà không để lại dấu vết liên kết.
+
+Tiêu chuẩn ERC-4337~\cite{erc4337} cho phép tách biệt logic thanh toán Gas khỏi ví người dùng thông qua hai cơ chế:
+\begin{enumerate}
+    \item \textbf{Hợp đồng Paymaster:} Bên thứ ba (Paymaster) bảo lãnh phí Gas thay cho người dùng, với điều kiện tuỳ chỉnh được mã hoá trong hàm \texttt{validatePaymasterUserOp()}.
+    \item \textbf{Triển khai lười (lazy deployment) qua \texttt{initCode}:} \texttt{UserOperation} có thể kèm theo \texttt{initCode} chứa bytecode để triển khai hợp đồng tài khoản ngay trong lần giao dịch đầu tiên, không cần giao dịch khởi tạo riêng.
+\end{enumerate}
+
+\subsection{Giải pháp Triển khai}
+\label{subsec:cold_start_solution}
+
+\subsubsection{Hợp đồng StealthPaymaster}
+
+Hệ thống triển khai hợp đồng \texttt{StealthPaymaster} kế thừa giao diện ERC-4337 Paymaster:
+
+\begin{verbatim}
+contract StealthPaymaster {
+    address public immutable entryPoint;
+
+    function validatePaymasterUserOp(
+        UserOperation calldata /*userOp*/,
+        bytes32 /*userOpHash*/,
+        uint256 /*maxCost*/
+    ) external view returns (bytes memory context, uint256 validationData) {
+        require(msg.sender == entryPoint, "Not entry point");
+        return ("", 0); // Bảo lãnh không điều kiện (testnet)
+    }
+
+    function deposit() public payable {
+        IEntryPoint(entryPoint).depositTo{value: msg.value}(address(this));
+    }
+}
+\end{verbatim}
+
+Hàm \texttt{validatePaymasterUserOp()} trả về \texttt{validationData = 0} (tức là hợp lệ) cho \textit{mọi} \texttt{UserOperation} gửi đến. Paymaster duy trì số dư ETH tại \texttt{EntryPoint} thông qua hàm \texttt{deposit()}, cung cấp ``bể Gas'' phục vụ toàn bộ hệ thống.
+
+\subsubsection{Triển khai Lười qua \texttt{initCode}}
+
+Khi người nhận muốn chi tiêu từ địa chỉ stealth lần đầu tiên, Relayer Server kiểm tra xem hợp đồng đã tồn tại chưa:
+
+\begin{verbatim}
+const codeAtAddress = await provider.getCode(senderStealthAddress);
+if (codeAtAddress === '0x') {
+    // Hợp đồng chưa tồn tại — thêm initCode để triển khai trong lần gọi này
+    const deployCallData = factoryInterface.encodeFunctionData(
+        'deployFor', [indexCommitmentBytes32]
+    );
+    initCode = ethers.concat([factoryAddress, deployCallData]);
+}
+\end{verbatim}
+
+\texttt{EntryPoint} sẽ gọi \texttt{StealthAccountFactory.deployFor(indexCommitment)} trước khi thực thi \texttt{callData}, triển khai \texttt{StealthAccount} và gọi hành động trong một giao dịch duy nhất. Phí Gas cho cả hai bước đều được \texttt{StealthPaymaster} bảo lãnh.
+
+\subsubsection{Luồng Hoàn chỉnh Không cần ETH từ Ví Chính}
+
+% Hình~\ref{fig:cold_start_flow} mô tả luồng chi tiêu hoàn chỉnh của một tài khoản stealth ``lạnh'':
+
+\begin{enumerate}
+    \item Người dùng yêu cầu chi tiêu từ địa chỉ stealth (chưa có ETH, chưa deploy).
+    \item Relayer Server sinh bằng chứng ZK và xây dựng \texttt{UserOperation} với:
+        \begin{itemize}
+            \item \texttt{initCode}: bytecode triển khai \texttt{StealthAccount}.
+            \item \texttt{callData}: lời gọi \texttt{executeStealthTransfer()}.
+            \item \texttt{paymasterAndData}: địa chỉ \texttt{StealthPaymaster}.
+            \item \texttt{signature}: bằng chứng Groth16 ZK.
+        \end{itemize}
+    \item \texttt{EntryPoint} gọi \texttt{StealthPaymaster.validatePaymasterUserOp()} → thành công.
+    \item \texttt{EntryPoint} triển khai \texttt{StealthAccount} qua \texttt{initCode} (sử dụng \texttt{CREATE2}).
+    \item \texttt{EntryPoint} gọi \texttt{StealthAccount.validateUserOp()} → xác minh ZK proof.
+    \item \texttt{EntryPoint} gọi \texttt{StealthAccount.executeStealthTransfer()} → chuyển tài sản.
+    \item \texttt{StealthPaymaster} chi trả phí Gas từ số dư \texttt{EntryPoint}.
+\end{enumerate}
+
+Ở không một bước nào ví chính của người dùng xuất hiện trong chuỗi giao dịch, đảm bảo tính không liên kết.
+
+\subsection{Kết quả Đạt được}
+\label{subsec:cold_start_result}
+
+\begin{itemize}
+    \item \textbf{Tính không liên kết được bảo toàn:} Toàn bộ giao dịch chi tiêu phát sinh từ địa chỉ \texttt{EntryPoint} (một hợp đồng toàn cục), không liên quan đến ví chính của người dùng.
+    \item \textbf{Trải nghiệm người dùng liền mạch:} Người nhận có thể chi tiêu ngay lập tức sau khi nhận tài sản mà không cần bước chuẩn bị Gas riêng.
+    \item \textbf{Chi phí Gas được Pool hóa:} Một Paymaster duy nhất phục vụ toàn bộ người dùng trong hệ thống, cho phép kinh tế hơn so với mô hình nạp Gas cá nhân.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Tối ưu Chi phí Cập nhật Merkle Tree bằng Mô hình ZK-Relayer Lai}
+\label{sec:merkle_hybrid}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Bài toán đặt ra}
+\label{subsec:merkle_problem}
+
+Hệ thống sử dụng Incremental Merkle Tree độ sâu $d = 20$ với hàm băm Poseidon để quản lý định danh các Stealth Account. Mỗi khi một tài khoản mới được đăng ký hoặc khóa chi tiêu được cập nhật (trong phục hồi), cây Merkle cần được cập nhật và gốc mới phải được ghi nhận lên chuỗi.
+
+Nếu toàn bộ logic cập nhật cây được thực hiện trực tiếp trên EVM, chi phí phát sinh theo mô hình xấu nhất có dạng:
+\[
+    \text{Gas}_{\text{on-chain}} \propto O(d) \times \text{Gas}_{\text{Poseidon}}
+\]
+với $d = 20$ cấp băm Poseidon, mỗi phép băm tiêu tốn khoảng 300 Gas trên EVM. Tổng chi phí xác minh một cập nhật đầy đủ on-chain sẽ vào khoảng $20 \times 300 = 6{,}000$ Gas chỉ riêng phần băm, chưa kể chi phí lưu trữ và logic hợp đồng. Quan trọng hơn, chi phí này \textbf{tăng tuyến tính} theo độ sâu cây khi hệ thống mở rộng quy mô.
+
+\subsection{Giải pháp Thiết kế: Mô hình ZK-Relayer Lai}
+\label{subsec:merkle_solution}
+
+Hệ thống áp dụng kiến trúc tách biệt ba tầng trách nhiệm:
+
+\begin{enumerate}
+    \item \textbf{Tầng Tính toán (Off-chain Server):} Thực hiện toàn bộ tính toán nặng về mặt số học -- cập nhật cây Poseidon, tính đường chứng minh Merkle (siblings), và sinh bằng chứng Groth16 -- hoàn toàn ngoài chuỗi với chi phí Gas bằng không.
+
+    \item \textbf{Tầng Lưu trữ Trạng thái (Off-chain + On-chain):} Server lưu trạng thái đầy đủ của cây trong tệp \texttt{leaves.json} với cấu trúc thưa (sparse). Chỉ \textbf{giá trị gốc} 32-byte duy nhất được lưu trữ on-chain tại hợp đồng \texttt{StealthTreeManager}.
+
+    \item \textbf{Tầng Xác minh (On-chain Smart Contract):} Hợp đồng \texttt{SMTUpdateVerifier} chỉ thực hiện xác minh bằng chứng Groth16 -- một phép tính \textbf{hằng số} $O(1)$ không phụ thuộc vào độ sâu cây -- trước khi cập nhật gốc.
+\end{enumerate}
+
+\subsubsection{Mạch ZK cho Cập nhật Cây (\texttt{smt\_update})}
+
+Mạch Circom \texttt{SMTUpdate} (độ sâu 20, $\approx$20,700 ràng buộc R1CS) xác minh đồng thời hai ràng buộc Merkle với cùng tập siblings:
+\[
+    f_{\text{Poseidon\_Merkle}}\!\left(\texttt{oldLeaf},\; \texttt{index},\; \texttt{siblings}\right) = \texttt{oldRoot}
+\]
+\[
+    f_{\text{Poseidon\_Merkle}}\!\left(\texttt{newLeaf},\; \texttt{index},\; \texttt{siblings}\right) = \texttt{newRoot}
+\]
+
+Nếu cả hai ràng buộc đồng thời thỏa mãn với cùng một tập \texttt{siblings} bí mật, bằng chứng chứng tỏ rằng \texttt{newRoot} được tạo ra \textit{chỉ} bằng cách thay thế lá tại \texttt{index} trong \texttt{oldRoot}, và mọi nút khác không thay đổi. Điều này đảm bảo tính toàn vẹn của cây mà không cần public toàn bộ cấu trúc.
+
+\subsubsection{Luồng Xử lý Cập nhật Lá}
+
+Khi một Stealth Account mới đăng ký (hàm \texttt{POST /leaves}), Relayer Server thực thi chuỗi:
+
+\begin{enumerate}
+    \item Lấy \texttt{oldRootHex} = gốc cây hiện tại.
+    \item Lấy \texttt{proofRes} = \texttt{createMerkleProof(i)} ← siblings \textit{trước khi} chèn lá.
+    \item Chèn lá mới: \texttt{tree.update(i, k)} cập nhật các nút trên đường từ lá đến gốc ($O(d)$ phép băm, hoàn toàn off-chain).
+    \item Sinh bằng chứng Groth16 SMT Update (thời gian: 2.0--2.5 giây off-chain).
+    \item Gọi on-chain: \texttt{contract.updateRoot(newRoot, leaf, index, zkAuth)}.
+    \item Hợp đồng gọi \texttt{SMTUpdateVerifier.verifyProof()} -- chi phí xác minh $\approx$270,000 Gas, \textbf{không đổi} theo kích thước cây.
+    \item Hợp đồng cập nhật \texttt{root = newRoot} (một lần ghi trạng thái 32 byte).
+\end{enumerate}
+
+\subsubsection{So sánh Chi phí Gas}
+
+Bảng~\ref{table:merkle_gas_compare} so sánh hai phương án:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Tiêu chí} & \textbf{Xác minh Merkle trực tiếp On-chain} & \textbf{ZK-Relayer Lai (dùng trong hệ thống)} \\ \hline
+Chi phí Gas xác minh & $O(d) \times \text{Gas}_\text{Poseidon}$ & $O(1) \approx 270{,}000$ Gas \\ \hline
+Gas khi $d=20$ & $\approx 6{,}000$+ Gas (phần băm) + logic & $\approx 270{,}000$ Gas (cố định) \\ \hline
+Gas khi $d=30$ & $\approx 3\times$ so với $d=20$ & $\approx 270{,}000$ Gas (không đổi) \\ \hline
+Tính toán Off-chain & Không & Có (sinh ZK proof $\sim$2 giây) \\ \hline
+Khả năng mở rộng & Giảm khi cây lớn hơn & Không phụ thuộc kích thước cây \\ \hline
+Bảo mật & Lộ cấu trúc cây & Ẩn siblings (zero-knowledge) \\ \hline
+\end{tabular}
+\caption{So sánh chi phí Gas giữa xác minh Merkle on-chain và mô hình ZK-Relayer}
+\label{table:merkle_gas_compare}
+\end{table}
+
+\subsection{Kết quả Đạt được}
+\label{subsec:merkle_result}
+
+\begin{itemize}
+    \item \textbf{Chi phí xác minh on-chain ổn định $O(1)$:} Bất kể cây có $10^3$ hay $10^6$ lá (tối đa $2^{20}$), chi phí xác minh luôn duy trì ở mức $\approx$270,000 Gas.
+    \item \textbf{Tính riêng tư tăng cường:} Tập \texttt{siblings} (tiết lộ cấu trúc cây) được giữ bí mật hoàn toàn -- chỉ bằng chứng ZK được gửi lên chuỗi.
+    \item \textbf{Khả năng mở rộng tuyến tính:} Việc tăng độ sâu cây (từ 20 lên 30 để hỗ trợ nhiều tài khoản hơn) không làm tăng chi phí on-chain.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Cơ chế Social Recovery dựa trên Index Commitment}
+\label{sec:social_recovery_contrib}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Bài toán đặt ra}
+\label{subsec:recovery_problem}
+
+Trong mô hình Stealth Wallet, người dùng có thể sở hữu nhiều Stealth Account với cùng một cặp khóa meta-address (scanPriv, spendPriv), mỗi tài khoản tương ứng với một giao dịch nhận riêng biệt. Cơ chế phục hồi cần đối mặt với ba ràng buộc đồng thời:
+
+\begin{enumerate}
+    \item \textbf{Ràng buộc mở rộng:} Nếu mỗi Stealth Account được phục hồi độc lập, người dùng phải thực hiện $N$ giao dịch on-chain cho $N$ tài khoản, chi phí tăng tuyến tính theo số lượng tài khoản.
+    \item \textbf{Ràng buộc liên kết:} Phục hồi công khai từng tài khoản riêng lẻ có thể tạo ra liên kết quan sát được giữa chúng, phá vỡ tính ẩn danh.
+    \item \textbf{Ràng buộc bảo mật guardian:} Danh sách guardian nếu bị lộ có thể trở thành điểm tấn công xã hội (social engineering) nhắm vào người dùng.
+\end{enumerate}
+
+\subsection{Giải pháp Thiết kế: Index Commitment}
+\label{subsec:recovery_solution}
+
+\subsubsection{Khái niệm Index Commitment}
+
+Hệ thống gắn quyền kiểm soát không vào từng Stealth Account riêng lẻ, mà vào \textbf{lá Merkle tại vị trí} $i$ trong cây. Một lá đại diện cho toàn bộ Stealth Account của người dùng thông qua giá trị:
+\[
+    \text{Leaf}_i = \text{Poseidon}(x)
+\]
+với $x$ là khóa chi tiêu. \textbf{Index Commitment} là một cam kết ẩn của vị trí lá:
+\[
+    C_{\text{index}} = \text{Poseidon}\!\bigl(\text{Poseidon}(i,\; 0) + \text{sharedSecretHash}\bigr)
+\]
+
+Mọi Stealth Account của cùng một người dùng đều được liên kết với \textbf{cùng một giá trị} $i$ này thông qua \texttt{IndexHash} $= \text{Poseidon}(i, 0)$ được công bố trong meta-address. Đây là điểm duy nhất cần cập nhật khi phục hồi.
+
+\subsubsection{Cơ chế Phục hồi Một điểm}
+
+Khi người dùng cần phục hồi (do mất khóa chi tiêu $x$), thay vì cập nhật từng Stealth Account:
+
+\begin{enumerate}
+    \item Guardian đề xuất thay thế $\text{Leaf}_i$ bằng $\text{Leaf}_i' = \text{Poseidon}(x_{\text{mới}})$.
+    \item Server sinh bằng chứng ZK chứng minh cập nhật cây hợp lệ: $\text{Root}_{\text{cũ}} \to \text{Root}_{\text{mới}}$.
+    \item Chỉ \textbf{một giao dịch on-chain} cập nhật gốc Merkle.
+    \item Mọi Stealth Account liên kết với $i$ tự động có giá trị $C_{\text{index}}$ mới.
+\end{enumerate}
+
+Không có giao dịch nào xuất hiện trực tiếp tại địa chỉ của từng Stealth Account, tránh tạo liên kết quan sát được.
+
+\subsubsection{Hợp đồng SocialRecoveryModule}
+
+Hợp đồng \texttt{SocialRecoveryModule} triển khai quy trình đề xuất -- bỏ phiếu -- thực thi với threshold $t$-trong-$n$:
+
+\begin{verbatim}
+contract SocialRecoveryModule {
+    IStealthTreeManager public treeManager;
+    uint32 public mappedIndex;      // chỉ mục lá trong Merkle Tree
+    mapping(address => bool) public isGuardian;
+    uint256 public threshold;
+
+    function proposeRecovery(bytes32 newRoot, bytes32 newLeaf)
+        external onlyGuardian returns (uint256 reqId) { ... }
+
+    function approveRecovery(uint256 reqId)
+        public onlyGuardian { ... }
+
+    function executeRecovery(uint256 reqId, ZKPAuth calldata auth)
+        external onlyGuardian {
+        require(req.approvals >= threshold, "not enough approvals");
+        // Gọi updateRoot với ZK proof — xác minh on-chain trước khi cập nhật
+        treeManager.updateRoot(req.newRoot, req.newLeaf, mappedIndex, auth);
+    }
+}
+\end{verbatim}
+
+Hàm \texttt{executeRecovery()} yêu cầu bằng chứng ZK SMT Update hợp lệ. Hợp đồng \texttt{treeManager} sẽ xác minh bằng chứng thông qua \texttt{SMTUpdateVerifier} trước khi cập nhật gốc, đảm bảo guardian không thể cập nhật cây tùy tiện.
+
+\subsubsection{Bảo mật Danh tính Guardian}
+
+Việc lưu guardian theo địa chỉ Ethereum (\texttt{isGuardian[address] => bool}) đủ bảo mật khi các địa chỉ guardian không được liên kết với danh tính thực. Hệ thống có thể nâng cấp lên mô hình cam kết ẩn danh hoàn toàn bằng cách thay thế bằng danh sách cam kết \texttt{keccak256(guardian || secret)} và Merkle Tree riêng, nhưng điều này không được triển khai trong phạm vi đồ án.
+
+\subsection{Kết quả Đạt được}
+\label{subsec:recovery_result}
+
+\begin{itemize}
+    \item \textbf{Chi phí phục hồi $O(1)$:} Bất kể người dùng có bao nhiêu Stealth Account, chỉ cần một giao dịch on-chain duy nhất để phục hồi toàn bộ -- thay vì $O(N)$ giao dịch theo mô hình per-account.
+    \item \textbf{Tính ẩn danh được duy trì:} Giao dịch phục hồi không xuất hiện tại địa chỉ của bất kỳ Stealth Account cụ thể nào, tránh tạo liên kết quan sát được.
+    \item \textbf{Xác minh ZK bắt buộc:} Guardian không thể đặt gốc Merkle tùy ý mà không có bằng chứng ZK hợp lệ, ngăn chặn tấn công cập nhật sai trạng thái.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Đảm bảo Tính nhất quán Trạng thái bằng Cơ chế Rollback Lạc quan}
+\label{sec:optimistic_rollback}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Bài toán đặt ra}
+\label{subsec:sync_problem}
+
+Hệ thống duy trì một bản sao Merkle Tree đầy đủ off-chain (tại Relayer Server) và chỉ lưu gốc Merkle lên chuỗi. Sự tách biệt này tạo ra khoảng thời gian không đồng bộ giữa hai kho trạng thái:
+
+\begin{enumerate}
+    \item \textbf{Mất đồng bộ do giao dịch on-chain thất bại:} Nếu Server đã chèn lá vào cây cục bộ nhưng giao dịch \texttt{contract.updateRoot()} bị revert (do hết Gas, bằng chứng lỗi thời, hoặc lỗi mạng), cây cục bộ có gốc $R'$ trong khi on-chain vẫn giữ $R$. Mọi bằng chứng ZK sinh sau đó sẽ dùng $R'$ sai, dẫn đến \texttt{INVALID\_PROOF} vĩnh viễn.
+
+    \item \textbf{Xung đột giao dịch đồng thời:} Nếu hai yêu cầu đăng ký lá xảy ra gần như đồng thời, bằng chứng ZK của yêu cầu thứ hai có thể được sinh ra dựa trên gốc cũ (trước khi yêu cầu thứ nhất hoàn thành), dẫn đến xác minh on-chain thất bại.
+
+    \item \textbf{Khởi động lại Server:} Nếu Server bị tắt bất thường giữa quá trình cập nhật, trạng thái \texttt{leaves.json} có thể không phản ánh đúng gốc on-chain.
+\end{enumerate}
+
+Không có cơ chế nào trong các giao thức blockchain tiêu chuẩn đảm bảo tính nhất quán tự động giữa trạng thái off-chain và on-chain.
+
+\subsection{Giải pháp Thiết kế}
+\label{subsec:sync_solution}
+
+\subsubsection{Cơ chế Rollback Lạc quan (Optimistic Rollback)}
+
+Hệ thống áp dụng cơ chế ``cập nhật trước, hoàn tác nếu thất bại'':
+
+\begin{enumerate}
+    \item \textbf{Ghi trạng thái cục bộ sớm:} Ngay khi nhận yêu cầu mới, Server chèn lá vào cây và lưu \texttt{leaves.json} trước khi gửi giao dịch on-chain. Điều này cho phép xử lý yêu cầu tiếp theo ngay lập tức mà không phải chờ xác nhận on-chain.
+
+    \item \textbf{Gửi giao dịch on-chain bất đồng bộ:} Server gọi \texttt{updateRootOnChain()} với \texttt{await tx.wait()}, chờ xác nhận.
+
+    \item \textbf{Rollback khi thất bại:} Nếu giao dịch revert hoặc timeout, hàm \texttt{rollbackLastLeaf()} được gọi ngay lập tức:
+\end{enumerate}
+
+\begin{verbatim}
+// routes/leaves.js
+const oldRootHex = getCurrentRootHex();
+const { rawProof: proofRes } = createMerkleProof(index); // siblings trước khi chèn
+insertLeaf(index, leaf);               // Cập nhật cục bộ NGAY
+const newRoot = getCurrentRootHex();
+
+try {
+    txHash = await updateRootOnChain(oldRootHex, newRoot, leaf, index, ...);
+} catch (err) {
+    rollbackLastLeaf();                // Hoàn tác nếu on-chain thất bại
+    return res.status(500).json({ error: err.message });
+}
+\end{verbatim}
+
+Hàm \texttt{rollbackLastLeaf()} thực hiện đặt ngược lá tại \texttt{nextIndex - 1} về giá trị 0 và giảm \texttt{nextIndex}:
+
+\begin{verbatim}
+export function rollbackLastLeaf() {
+    if (nextIndex === 0) return;
+    const lastIndex = nextIndex - 1;
+    leafMap.delete(lastIndex);
+    tree.update(lastIndex, 0n);   // Đưa lá về giá trị mặc định (zero leaf)
+    nextIndex = lastIndex;
+    saveStore();                   // Ghi lại ngay vào leaves.json
+}
+\end{verbatim}
+
+\subsubsection{Kiểm tra Đồng bộ tại Khởi động}
+
+Mỗi lần Server khởi động, hàm \texttt{initTree()} thực hiện so sánh gốc cục bộ với gốc on-chain:
+
+\begin{verbatim}
+const currentOnchainRoot = await contract.root();
+const calculatedRoot = rootToHex(tree.root);
+
+if (currentOnchainRoot !== calculatedRoot) {
+    isTreeSynced = false;
+    console.log('[ROOT MISMATCH] Server: ' + calculatedRoot
+                + ' | On-chain: ' + currentOnchainRoot);
+    // Chặn mọi yêu cầu chèn lá mới cho đến khi đồng bộ lại
+}
+\end{verbatim}
+
+Khi phát hiện lệch (\texttt{isTreeSynced = false}), mọi yêu cầu \texttt{POST /leaves} đều bị từ chối với mã lỗi 409 Conflict, ngăn chặn sinh bằng chứng ZK sẽ thất bại trên chuỗi.
+
+\subsubsection{Pre-flight Verification}
+
+Trước khi gửi giao dịch on-chain tốn kém, Relayer Server thực hiện \texttt{staticCall} để kiểm tra trước:
+
+\begin{verbatim}
+// contractService.js -- Kiểm tra root đồng bộ TRƯỚC khi gọi on-chain
+const actualOnChainRoot = `0x${BigInt(await contract.root()).toString(16)...}`;
+if (actualOnChainRoot !== normalizedOldRoot) {
+    throw new Error(
+        'Server tree is out of sync with on-chain state.\n'
+        + '→ Delete leaves.json and restart the server to re-sync.'
+    );
+}
+// Chỉ sinh bằng chứng ZK sau khi xác nhận root khớp
+const { auth } = await generateUpdateProof(...);
+\end{verbatim}
+
+Bước này ngăn chặn việc lãng phí 2--3 giây sinh bằng chứng ZK cho một giao dịch chắc chắn sẽ thất bại.
+
+\subsubsection{Idempotency trong Đăng ký Lá}
+
+Để xử lý an toàn các retry khi mạng không ổn định, Server kiểm tra trùng lá trước khi chèn:
+
+\begin{verbatim}
+if (hasLeaf(leaf)) {
+    const existingIndex = findLeafIndex(leaf);
+    return res.json({
+        success: true,
+        index: existingIndex,
+        leaf,
+        newRoot: getCurrentRootHex(),
+        txHash: null,
+        message: 'Leaf already exists, returning existing coordinates.'
+    });
+    // Không chèn mới, không thay đổi gốc, không tốn Gas
+}
+\end{verbatim}
+
+Gọi \texttt{POST /leaves} nhiều lần với cùng tham số luôn trả về kết quả xác định, đảm bảo an toàn khi retry.
+
+\subsection{Kết quả Đạt được}
+\label{subsec:sync_result}
+
+\begin{itemize}
+    \item \textbf{Tính nhất quán được đảm bảo tại khởi động:} Cơ chế kiểm tra root tại \texttt{initTree()} phát hiện và báo lỗi ngay lập tức khi Server không đồng bộ với chuỗi, chặn mọi thao tác có thể sinh bằng chứng sai.
+
+    \item \textbf{Rollback tự động:} Giao dịch on-chain thất bại không dẫn đến trạng thái mất đồng bộ vĩnh viễn -- \texttt{rollbackLastLeaf()} phục hồi cây cục bộ về trạng thái khớp với on-chain trong thời gian $O(d)$.
+
+    \item \textbf{Pre-flight Guard tiết kiệm tài nguyên:} Kiểm tra root trước khi sinh ZK proof tránh lãng phí 2--3 giây tính toán bằng chứng cho một yêu cầu chắc chắn thất bại.
+
+    \item \textbf{Idempotency bảo vệ retry:} Cơ chế kiểm tra trùng lá đảm bảo hành vi xác định (deterministic) khi client retry do mạng không ổn định, loại bỏ hoàn toàn khả năng đăng ký trùng.
+\end{itemize}
+
+\end{document}

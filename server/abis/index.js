@@ -1,4 +1,4 @@
-// ABI for IncrementalMerkleTree (OffchainMerkleTreeManager)
+// ABI for StealthTreeManager (OffchainMerkleTreeManager)
 export const ABI = [
     'function updateRoot(bytes32 newRoot, bytes32 leaf, uint32 index, tuple(uint256[2] a, uint256[2][2] b, uint256[2] c) auth) external',
     'function root() external view returns (bytes32)',

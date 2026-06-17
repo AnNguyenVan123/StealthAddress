@@ -1,0 +1,95 @@
+@startuml class_stealth_wallet
+!theme plain
+skinparam roundcorner 10
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam nodesep 50
+skinparam ranksep 50
+
+skinparam class {
+    BackgroundColor #F8FBFF
+    BorderColor #2C6FAC
+    ArrowColor #2C6FAC
+    HeaderBackgroundColor #EBF4FF
+}
+
+title Biểu đồ Lớp Smart Contract (Class Diagram) - Stealth Wallet
+
+package "Account Abstraction (ERC-4337)" {
+    
+    class StealthAccountFactory {
+        - accountImplementation: address
+        + createAccount(indexCommitment: uint256, salt: uint256): address
+        + getAddress(indexCommitment: uint256, salt: uint256): address
+    }
+
+    class StealthAccount {
+        - indexCommitment: uint256
+        - treeManager: StealthTreeManager
+        - announcer: ERC5564Announcer
+        + validateUserOp(userOp: UserOperation, userOpHash: bytes32): uint256
+        + executeStealthTransfer(dest: address, value: uint256, data: bytes, zkProof: bytes)
+        + verifySpendProof(zkProof: bytes): bool
+    }
+
+    class StealthPaymaster {
+        - owner: address
+        + validatePaymasterUserOp(userOp: UserOperation, userOpHash: bytes32, maxCost: uint256): context
+        + postOp(mode: PostOpMode, context: bytes, actualGasCost: uint256)
+    }
+}
+
+package "Core Protocol" {
+    class ERC5564Announcer {
+        <<event>> Announcement(schemeId, stealthAddress, caller, ephemeralPubKey, metadata)
+        + announce(schemeId: uint256, stealthAddress: address, ephemeralPubKey: bytes, metadata: bytes)
+    }
+}
+
+package "ZKP & Merkle Tree" {
+    
+    class StealthTreeManager {
+        - root: uint256
+        - nextIndex: uint256
+        - updateVerifier: SMTUpdateVerifier
+        + insertLeaf(leaf: uint256)
+        + updateRoot(newRoot: uint256, leaf: uint256, index: uint256, zkProof: bytes)
+        + isKnownRoot(root: uint256): bool
+    }
+
+    class SMTUpdateVerifier {
+        + verifyProof(a: uint256[2], b: uint256[2][2], c: uint256[2], input: uint256[4]): bool
+    }
+
+    class StealthSpendVerifier {
+        + verifyProof(a: uint256[2], b: uint256[2][2], c: uint256[2], input: uint256[3]): bool
+    }
+}
+
+package "Social Recovery" {
+    class SocialRecoveryModule {
+        - guardians: mapping(address => bool)
+        - threshold: uint256
+        - treeManager: StealthTreeManager
+        + proposeRecovery(newRoot: uint256, newLeaf: uint256, zkProof: bytes): uint256
+        + approveRecovery(reqId: uint256)
+        + executeRecovery(reqId: uint256)
+    }
+}
+
+' =================================
+' Khai báo mối quan hệ (Relationships)
+' =================================
+
+StealthAccountFactory .down.> StealthAccount : <<Triển khai (CREATE2)>>
+StealthAccount -right-> StealthTreeManager : <<Kiểm tra Root (Read)>>
+StealthAccount -up-> ERC5564Announcer : <<Phát sự kiện (Emit)>>
+StealthAccount -down-> StealthSpendVerifier : <<Xác minh ZKP Chi tiêu>>
+
+SocialRecoveryModule -up-> StealthTreeManager : <<Cập nhật Root mới (Write)>>
+StealthTreeManager -down-> SMTUpdateVerifier : <<Xác minh ZKP Cập nhật>>
+
+StealthPaymaster .left.> StealthAccount : <<Tài trợ Gas>>
+
+@enduml

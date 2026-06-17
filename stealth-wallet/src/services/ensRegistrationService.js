@@ -1,12 +1,13 @@
 import { ethers } from "ethers";
 
-// ─── ENS Sepolia Contract Addresses (verified) ────────────────────────────────
-const ENS_CONTROLLER = "0xfb3cE5D01e0f33f41DbB39035dB9745962F1f968"; // ETHRegistrarController
+// ─── ENS Sepolia Contract Addresses (ENSv2 Alpha - June 2026) ──────────────
+// IMPORTANT: The old controllers (0xfb3c, 0xFED6) have been REVOKED from BaseRegistrar.
+// The only active controllers are the new ENSv2 TestnetV1PremigrationRegistrar contracts.
+const ENS_CONTROLLER = "0xdf60C561Ca35AD3C89D24BbA854654b1c3477078"; // TestnetV1PremigrationRegistrar (active controller on BaseRegistrar)
 const BASE_REGISTRAR = "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85"; // Same on all networks
-const ENS_RESOLVER   = "0x8FADE66B79cC9f707aB26799354482EB93a5B7dD"; // PublicResolver Sepolia
+const ENS_RESOLVER = "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5"; // PublicResolver Sepolia
 
 const REGISTRATION_DURATION = 365 * 24 * 60 * 60; // 1 year
-const MIN_COMMITMENT_AGE    = 65;                   // seconds (60 + 5s buffer)
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
 const BASE_REGISTRAR_ABI = [
@@ -14,14 +15,23 @@ const BASE_REGISTRAR_ABI = [
     "function nameExpires(uint256 id) view returns (uint256)",
 ];
 
-// ENS v2 uses a single Registration struct
+// ENSv2 Alpha TestnetV1PremigrationRegistrar ABI
+// Key difference from old controller:
+//   - NO commit/reveal scheme (no makeCommitment, no commit, no commitments)
+//   - NO rentPrice (registration is FREE on testnet, ETH is refunded)
+//   - Single-step register() call
 const CONTROLLER_ABI = [
-    "function available(string label) view returns (bool)",
-    "function rentPrice(string label, uint256 duration) view returns (tuple(uint256 base, uint256 premium) price)",
-    "function makeCommitment(tuple(string label, address owner, uint256 duration, bytes32 secret, address resolver, bytes[] data, uint8 reverseRecord, bytes32 referrer) registration) pure returns (bytes32)",
-    "function commit(bytes32 commitment) external",
     "function register(tuple(string label, address owner, uint256 duration, bytes32 secret, address resolver, bytes[] data, uint8 reverseRecord, bytes32 referrer) registration) external payable",
+
+    // --- CUSTOM ERRORS ---
+    "error NameNotAvailable(string name)",
+    "error DurationTooShort(uint256 duration)",
+    "error ResolverRequiredWhenDataSupplied()",
+    "error ResolverRequiredForReverseRecord()",
+    "error ExpiryTooLarge(uint256 expiry)",
+    "error RefundFailed(address recipient, uint256 amount)",
 ];
+const iface = new ethers.Interface(CONTROLLER_ABI);
 
 // Used to set text records AFTER registration
 const RESOLVER_ABI = [
@@ -52,99 +62,176 @@ export async function checkAvailability(name, signer) {
 
 /**
  * Lấy giá đăng ký từ ETHRegistrarController.
- * @returns {bigint} total price (including 15% buffer) in wei
+ * ENSv2 Alpha on Sepolia is FREE — returns 0.
+ * @returns {bigint} total price in wei (always 0 on testnet)
  */
 export async function getRentPrice(name, signer) {
-    try {
-        const c = new ethers.Contract(ENS_CONTROLLER, CONTROLLER_ABI, signer);
-        const price = await c.rentPrice(name, REGISTRATION_DURATION);
-        return price.base + price.premium;
-    } catch {
-        return 0n;
-    }
+    // ENSv2 Alpha TestnetV1PremigrationRegistrar is FREE
+    // The contract refunds all ETH sent to it
+    return 0n;
 }
 
 /**
- * Đăng ký ENS tự động và set stealth keys qua 3 bước:
- *   Tx 1: commit
- *   Wait 65s
- *   Tx 2: register (không kèm data để tránh multicallWithNodeCheck)
- *   Tx 3: set text records bằng resolver.multicall()
- *
- * @param {string} name - nhãn ngắn (vd: "alice")
- * @param {{ scanPub, spendPub, indexHash }} stealthMeta
- * @param {ethers.Signer} signer
- * @param {function} onProgress - (message, phase) => void
- * @returns {string} "name.eth"
+ * Create registration payload.
+ * ENSv2 Alpha does NOT use commit/reveal, so this just builds the struct.
  */
-export async function registerEnsWithStealthKeys(name, stealthMeta, signer, onProgress = () => {}) {
-    const ownerAddress = await signer.getAddress();
-    const controller   = new ethers.Contract(ENS_CONTROLLER, CONTROLLER_ABI, signer);
-    const nameHash     = ethers.namehash(`${name}.eth`);
-
-    // ── Bước 1: Verify lần cuối ────────────────────────────────────────────
-    onProgress("Verifying availability...", "check");
-    const { available } = await checkAvailability(name, signer);
-    if (!available) throw new Error(`"${name}.eth" is already taken. Please choose another name.`);
-
-    // ── Bước 2: Xây dựng Registration struct (KHÔNG có data để tránh multicall issue) ──
+export async function createCommitment(name, ownerAddress) {
     const secret = ethers.hexlify(ethers.randomBytes(32));
     const registration = {
-        label:         name,
-        owner:         ownerAddress,
-        duration:      REGISTRATION_DURATION,
+        label: name,
+        owner: ownerAddress,
+        duration: REGISTRATION_DURATION,
         secret,
-        resolver:      ENS_RESOLVER,   // Set resolver nhưng không set records trong tx này
-        data:          [],              // Empty → bỏ qua multicallWithNodeCheck
+        resolver: ENS_RESOLVER,
+        data: [],
         reverseRecord: 0,
-        referrer:      ethers.ZeroHash,
+        referrer: ethers.ZeroHash,
     };
+    return { registration, secret };
+}
 
-    // ── Bước 3: Commit ─────────────────────────────────────────────────────
-    onProgress("Creating commitment...", "commit");
-    const commitment = await controller.makeCommitment(registration);
+/**
+ * Submit commitment — ENSv2 Alpha skips commit/reveal entirely.
+ * This function is kept for backward compatibility with the UI flow,
+ * but it does NOT send any transaction. It returns immediately.
+ */
+export async function submitCommitment(registration, signer) {
+    console.log("[ENS Debug] ENSv2 Alpha: No commit/reveal needed. Skipping commit step.");
+    // Return a fake commitment hash and current timestamp
+    // The UI will use these to determine when to allow Step 2
+    const commitmentHash = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+        ["string", "address", "uint256", "bytes32"],
+        [registration.label, registration.owner, registration.duration, registration.secret]
+    ));
+    return { commitmentHash, timestamp: Math.floor(Date.now() / 1000) - 120 };
+}
 
-    onProgress("Submitting commitment (Tx 1/3)...", "commit-tx");
-    const commitTx = await controller.commit(commitment);
-    await commitTx.wait();
+/**
+ * Check commitment status — always returns "ready" for ENSv2 Alpha.
+ */
+export async function checkCommitmentStatus(commitmentHash) {
+    // ENSv2 Alpha: no commit/reveal, always ready
+    return Math.floor(Date.now() / 1000) - 120; // Pretend it was committed 2 minutes ago
+}
 
-    // ── Bước 4: Đợi minCommitmentAge ──────────────────────────────────────
-    onProgress(`Commitment confirmed! Waiting ${MIN_COMMITMENT_AGE}s...`, "wait");
-    await new Promise((resolve) => {
-        let remaining = MIN_COMMITMENT_AGE;
-        const id = setInterval(() => {
-            remaining--;
-            onProgress(`Waiting ${remaining}s before registration...`, "wait");
-            if (remaining <= 0) { clearInterval(id); resolve(); }
-        }, 1000);
-    });
+/**
+ * Register the name directly — single-step on ENSv2 Alpha.
+ * The TestnetV1PremigrationRegistrar is FREE and refunds all ETH.
+ */
+export async function registerName(registration, signer) {
+    console.log("[ENS Debug] registerName called with ENSv2 Alpha controller:", ENS_CONTROLLER);
+    console.log("[ENS Debug] Registration payload:", registration);
 
-    // ── Bước 5: Register ──────────────────────────────────────────────────
-    onProgress("Registering name (Tx 2/3)...", "register");
-    let priceWithBuffer = 0n;
+    const controller = new ethers.Contract(
+        ENS_CONTROLLER,
+        CONTROLLER_ABI,
+        signer
+    );
+
+    const ownerAddress = await signer.getAddress();
+
+    // ----------------------------------------------------
+    // 1. Availability Check
+    // ----------------------------------------------------
+    const { available } = await checkAvailability(registration.label, signer);
+    if (!available) {
+        throw new Error(`${registration.label}.eth is no longer available.`);
+    }
+    console.log("[ENS Debug] Name is available ✓");
+
+    // ----------------------------------------------------
+    // 2. Static Call Simulation
+    // ----------------------------------------------------
     try {
-        const price = await controller.rentPrice(name, REGISTRATION_DURATION);
-        priceWithBuffer = (price.base + price.premium) * 115n / 100n;
-    } catch { /* Sepolia may be free */ }
+        console.log("[ENS Debug] Running staticCall simulation...");
+        const rpcProvider = new ethers.JsonRpcProvider(import.meta.env.VITE_RPC_URL);
+        const rpcController = new ethers.Contract(ENS_CONTROLLER, CONTROLLER_ABI, rpcProvider);
 
-    const registerTx = await controller.register(registration, { value: priceWithBuffer });
-    await registerTx.wait();
-    onProgress(`"${name}.eth" registered! Setting stealth records (Tx 3/3)...`, "records");
+        await rpcController.register.staticCall(registration, {
+            value: 0n, // FREE on testnet
+            from: ownerAddress,
+        });
+        console.log("✅ [ENS Debug] staticCall succeeded!");
+    } catch (err) {
+        console.error("🚨 [ENS Debug] staticCall failed:", err);
 
-    // ── Bước 6: Set stealth text records via resolver.multicall() ──────────
-    const resolver     = new ethers.Contract(ENS_RESOLVER, RESOLVER_ABI, signer);
+        let revertHex = err.data || err.error?.data || err.info?.error?.data;
+        if (typeof revertHex === 'string' && revertHex.includes("0x")) {
+            revertHex = "0x" + revertHex.split("0x")[1];
+        }
+
+        if (revertHex && typeof revertHex === 'string' && revertHex.length > 2) {
+            console.log("[ENS Debug] Revert data:", revertHex);
+            try {
+                const decoded = iface.parseError(revertHex);
+                if (decoded) {
+                    throw new Error(`ENS Contract rejected: ${decoded.name}(${decoded.args.join(", ")})`);
+                }
+            } catch (decodeErr) {
+                if (decodeErr.message.startsWith("ENS Contract rejected")) throw decodeErr;
+                throw new Error(`ENS Contract rejected (Hex): ${revertHex}`);
+            }
+        } else {
+            console.warn("[ENS Debug] No revert data, proceeding to real transaction...");
+        }
+    }
+
+    // ----------------------------------------------------
+    // 3. Gas Estimation
+    // ----------------------------------------------------
+    let safeGasLimit;
+    try {
+        const estimatedGas = await controller.register.estimateGas(registration, { value: 0n });
+        safeGasLimit = (estimatedGas * 150n) / 100n; // 50% buffer for safety
+        console.log("[ENS Debug] Estimated gas:", estimatedGas.toString(), "-> safe:", safeGasLimit.toString());
+    } catch (err) {
+        console.warn("[ENS Debug] estimateGas failed, using default gas limit.", err.message?.slice(0, 100));
+        safeGasLimit = 500000n;
+    }
+
+    // ----------------------------------------------------
+    // 4. Send Transaction (FREE — no ETH needed)
+    // ----------------------------------------------------
+    console.log("[ENS Debug] Sending register transaction with gasLimit:", safeGasLimit.toString());
+    let receipt;
+    try {
+        const tx = await controller.register(registration, {
+            value: 0n, // FREE on ENSv2 Alpha testnet
+            gasLimit: safeGasLimit,
+        });
+
+        console.log("[ENS Debug] Tx sent, waiting for confirmation... Hash:", tx.hash);
+        receipt = await tx.wait();
+    } catch (error) {
+        console.error("[ENS Debug] Transaction failed:", error.message);
+        throw new Error(`Registration transaction failed: ${error.message}`);
+    }
+
+    if (!receipt || receipt.status !== 1) {
+        throw new Error("Transaction reverted on-chain.");
+    }
+
+    console.log("✅ [ENS Debug] Registration successful! Block:", receipt.blockNumber);
+    return receipt;
+}
+
+export async function setStealthRecords(name, stealthMeta, signer) {
+    const ownerAddress = await signer.getAddress();
+    const nameHash = ethers.namehash(`${name}.eth`);
+    const resolver = new ethers.Contract(ENS_RESOLVER, RESOLVER_ABI, signer);
     const resolverIface = new ethers.Interface(RESOLVER_ABI);
 
     const multicallData = [
-        resolverIface.encodeFunctionData("setAddr",  [nameHash, ownerAddress]),
-        resolverIface.encodeFunctionData("setText",  [nameHash, "stealth.scanPub",   stealthMeta.scanPub]),
-        resolverIface.encodeFunctionData("setText",  [nameHash, "stealth.spendPub",  stealthMeta.spendPub]),
-        resolverIface.encodeFunctionData("setText",  [nameHash, "stealth.indexHash", stealthMeta.indexHash]),
+        resolverIface.encodeFunctionData("setAddr", [nameHash, ownerAddress]),
+        resolverIface.encodeFunctionData("setText", [nameHash, "stealth.scanPub", stealthMeta.scanPub]),
+        resolverIface.encodeFunctionData("setText", [nameHash, "stealth.spendPub", stealthMeta.spendPub]),
+        resolverIface.encodeFunctionData("setText", [nameHash, "stealth.indexHash", stealthMeta.indexHash]),
     ];
 
-    const setRecordsTx = await resolver.multicall(multicallData);
-    await setRecordsTx.wait();
-
-    onProgress(`"${name}.eth" fully configured with stealth keys! 🎉`, "done");
-    return `${name}.eth`;
+    const tx = await resolver.multicall(multicallData);
+    const receipt = await tx.wait();
+    if (!receipt || receipt.status !== 1) {
+        throw new Error("Set records transaction failed.");
+    }
+    return receipt;
 }

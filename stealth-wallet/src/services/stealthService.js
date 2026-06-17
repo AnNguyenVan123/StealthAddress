@@ -7,7 +7,7 @@ import { announcerAbi } from "../abi/announcerAbi";
 const RPC_URL = import.meta.env.VITE_RPC_URL;
 const FACTORY_ADDRESS = import.meta.env.VITE_FACTORY_ADDRESS;
 const ANNOUNCER_ADDRESS = import.meta.env.VITE_ANNOUNCER_ADDRESS;
-const SERVER_URL = import.meta.env.VITE_SERVER_URL;
+const SERVER_URL = import.meta.env.VITE_SERVER_URL !== undefined ? import.meta.env.VITE_SERVER_URL : "http://localhost:3001";
 /**
  * Resolve recipient's abstract account from indexCommitment.
  *

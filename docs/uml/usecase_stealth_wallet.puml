@@ -1,0 +1,74 @@
+@startuml usecase_stealth_wallet
+!theme plain
+skinparam actorStyle awesome
+skinparam roundcorner 10
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 13
+skinparam ArrowThickness 1.2
+skinparam packageStyle rectangle
+
+skinparam usecase {
+    BackgroundColor #F8FBFF
+    BorderColor #4A90D9
+}
+skinparam actor {
+    BackgroundColor White
+    BorderColor #2C6FAC
+}
+
+left to right direction
+
+title Biểu đồ Use Case Tổng quát - Hệ thống Stealth Wallet
+
+actor "Người nhận\n(Receiver)" as Receiver
+actor "Người gửi\n(Sender)" as Sender
+actor "Người giám hộ\n(Guardian)" as Guardian
+actor "Hệ thống ENS" as ENS
+actor "Hệ thống Relayer\n& Paymaster" as Relayer
+
+rectangle "Stealth Wallet Core" {
+
+    package "1. Quản lý Tài khoản" {
+        usecase "Tạo / Nhập ví ẩn danh" as UC_Wallet
+        usecase "Đăng ký & Liên kết ENS" as UC_ENS
+        usecase "Cấu hình Người giám hộ" as UC_GuardConfig
+    }
+
+    package "2. Giao dịch Ẩn danh" {
+        usecase "Gửi tài sản ẩn danh" as UC_Send
+        usecase "Quét tài sản nhận" as UC_Scan
+        usecase "Chi tiêu tài sản" as UC_Spend
+    }
+
+    package "3. Bảo mật & Hỗ trợ" {
+        usecase "Phục hồi tài khoản" as UC_Recovery
+        usecase "Xử lý giao dịch ẩn danh\n(ZKP & Trả Gas)" as UC_Process
+    }
+}
+
+' Receiver Actions
+Receiver --> UC_Wallet
+Receiver --> UC_ENS
+Receiver --> UC_GuardConfig
+Receiver --> UC_Scan
+Receiver --> UC_Spend
+Receiver --> UC_Recovery : Khởi tạo
+
+' Sender Actions
+Sender --> UC_Send
+
+' Guardian Actions
+Guardian --> UC_Recovery : Phê duyệt
+
+' External Systems
+UC_ENS ---> ENS : Tương tác
+UC_Send ---> ENS : Tra cứu địa chỉ
+
+' System Processing
+UC_Send ..> UC_Process : <<include>>
+UC_Spend ..> UC_Process : <<include>>
+UC_Recovery ..> UC_Process : <<include>>
+UC_Process ---> Relayer : Giao phó
+
+@enduml

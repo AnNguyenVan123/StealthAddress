@@ -2,6 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import { PORT } from './config/index.js';
 import { initTree, getCurrentRootHex } from './services/merkleService.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 import leavesRouter from './routes/leaves.js';

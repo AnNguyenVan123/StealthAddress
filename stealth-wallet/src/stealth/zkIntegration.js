@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { buildPoseidon } from "circomlibjs";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
+const SERVER_URL = import.meta.env.VITE_SERVER_URL !== undefined ? import.meta.env.VITE_SERVER_URL : "http://localhost:3001";
 
 let poseidonInstance = null;
 let F = null;

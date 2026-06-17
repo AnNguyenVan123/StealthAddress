@@ -1,0 +1,87 @@
+@startuml sd_social_recovery
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+skinparam ParticipantPadding 15
+skinparam sequenceArrowThickness 1.2
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+
+skinparam participant {
+    BackgroundColor #F8FBFF
+    BorderColor #2C6FAC
+}
+
+title Luồng Phục hồi Tài khoản (Social Recovery)
+
+actor "Chủ ví" as Owner
+actor "Người Giám hộ\n(Guardians)" as Guardian
+participant "Client\n(Wallet App)" as Client
+participant "Relayer Server" as Server
+participant "Smart Contract\n(Recovery & Merkle)" as Chain
+
+== 1. Thiết lập Ban đầu ==
+Owner -> Client : Cấu hình danh sách Giám hộ & Ngưỡng duyệt
+activate Client
+Client -> Chain : Khởi tạo Hợp đồng Social Recovery
+activate Chain
+Chain --> Client : Xác nhận cấu hình
+deactivate Chain
+Client --> Owner : Hoàn tất thiết lập
+deactivate Client
+
+== 2. Đề xuất Phục hồi ==
+note over Guardian: Chủ ví mất khóa, nhờ Giám hộ hỗ trợ
+Guardian -> Client : Tạo yêu cầu phục hồi với Khóa thay thế
+activate Client
+
+Client -> Server : Yêu cầu chứng minh cập nhật khóa (ZKP)
+activate Server
+Server -> Server : Tính toán Root mới & Sinh ZKP
+Server --> Client : Bằng chứng ZKP & Dữ liệu Root
+deactivate Server
+
+Client -> Chain : Gửi Đề xuất Phục hồi (Kèm ZKP)
+activate Chain
+Chain --> Client : Ghi nhận Đề xuất
+deactivate Chain
+
+Client --> Guardian : Chờ các Giám hộ khác phê duyệt
+deactivate Client
+
+== 3. Phê duyệt Đề xuất ==
+loop Cho đến khi đủ ngưỡng (Threshold)
+    Guardian -> Client : Đồng ý phục hồi
+    activate Client
+    Client -> Chain : Gửi lượt phê duyệt (Approve)
+    activate Chain
+    Chain --> Client : Xác nhận lượt duyệt
+    deactivate Chain
+    Client --> Guardian : Thông báo phê duyệt thành công
+    deactivate Client
+end
+
+== 4. Thực thi & Hoàn tất ==
+Guardian -> Client : Yêu cầu Thực thi Phục hồi
+activate Client
+Client -> Chain : Thực thi (Execute Recovery)
+activate Chain
+
+Chain -> Chain : Xác minh ZKP & Cập nhật Merkle Root On-chain
+Chain --> Client : Xác nhận Thực thi thành công
+deactivate Chain
+
+Client -> Server : Đồng bộ trạng thái mới lên Server
+activate Server
+Server --> Client : Đồng bộ hoàn tất
+deactivate Server
+
+Client --> Guardian : Phục hồi hoàn tất
+deactivate Client
+
+note over Owner: Chủ ví có thể đăng nhập bằng Khóa mới
+
+@enduml

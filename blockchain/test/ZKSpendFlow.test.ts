@@ -22,8 +22,8 @@ describe("Verify and Spend Flow", function () {
         verifier = await Verifier.deploy();
         await verifier.waitForDeployment();
 
-        // 2. Deploy Tree Manager (IncrementalMerkleTree)
-        const IMT = await ethers.getContractFactory("IncrementalMerkleTree");
+        // 2. Deploy Tree Manager (StealthTreeManager)
+        const IMT = await ethers.getContractFactory("StealthTreeManager");
         treeManager = await IMT.deploy();
         await treeManager.waitForDeployment();
 

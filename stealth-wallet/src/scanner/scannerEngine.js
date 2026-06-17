@@ -4,7 +4,7 @@ import { stealthAccountFactoryAbi } from "../abi/stealthAccountFactoryAbi"
 import { computeIndexCommitment } from "../stealth/zkIntegration.js"
 
 const RPC = import.meta.env.VITE_RPC_URL
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000"
+const SERVER_URL = import.meta.env.VITE_SERVER_URL !== undefined ? import.meta.env.VITE_SERVER_URL : "http://localhost:3001";
 
 const provider = new ethers.JsonRpcProvider(RPC)
 const announcerAddress = import.meta.env.VITE_ANNOUNCER_ADDRESS

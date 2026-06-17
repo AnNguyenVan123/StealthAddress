@@ -49,13 +49,14 @@ async function run() {
         console.log("Input written to input.json in stealth_spend dir");
         
         console.log("Generating Proof...");
-        // the zkey and wasm might be outdated because we changed the circom file but didn't successfully fully compile it because Windows cmd.
+        const t0 = performance.now();
         const { proof, publicSignals } = await groth16.fullProve(
              input,
              path.join(circuitDir, "stealth_js/stealth.wasm"),
              path.join(circuitDir, "stealth_0000.zkey")
         );
-        console.log("Proof successfully generated!");
+        const t1 = performance.now();
+        console.log("Proof successfully generated in", ((t1 - t0) / 1000).toFixed(3), "seconds");
         fs.writeFileSync(path.join(circuitDir, "proof.json"), JSON.stringify(proof, null, 2));
         fs.writeFileSync(path.join(circuitDir, "public.json"), JSON.stringify(publicSignals, null, 2));
         

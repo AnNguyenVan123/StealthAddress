@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-interface IIncrementalMerkleTree {
+interface IStealthTreeManager {
     struct ZKPAuth {
         uint256[2] a;
         uint256[2][2] b;
@@ -15,8 +15,8 @@ interface IIncrementalMerkleTree {
     ) external;
 }
 
-contract SocialRecovery {
-    IIncrementalMerkleTree public treeManager;
+contract SocialRecoveryModule {
+    IStealthTreeManager public treeManager;
     uint32 public mappedIndex;
     
     mapping(address => bool) public isGuardian;
@@ -44,21 +44,21 @@ contract SocialRecovery {
         address[] memory _guardians,
         uint256 _threshold
     ) {
-        require(_threshold > 0 && _threshold <= _guardians.length, "SocialRecovery: invalid threshold");
-        treeManager = IIncrementalMerkleTree(_treeManager);
+        require(_threshold > 0 && _threshold <= _guardians.length, "SocialRecoveryModule: invalid threshold");
+        treeManager = IStealthTreeManager(_treeManager);
         mappedIndex = _mappedIndex;
         threshold = _threshold;
 
         for (uint256 i = 0; i < _guardians.length; i++) {
-            require(_guardians[i] != address(0), "SocialRecovery: invalid guardian");
-            require(!isGuardian[_guardians[i]], "SocialRecovery: duplicate guardian");
+            require(_guardians[i] != address(0), "SocialRecoveryModule: invalid guardian");
+            require(!isGuardian[_guardians[i]], "SocialRecoveryModule: duplicate guardian");
             isGuardian[_guardians[i]] = true;
         }
         guardianCount = _guardians.length;
     }
 
     modifier onlyGuardian() {
-        require(isGuardian[msg.sender], "SocialRecovery: not a guardian");
+        require(isGuardian[msg.sender], "SocialRecoveryModule: not a guardian");
         _;
     }
 
@@ -83,8 +83,8 @@ contract SocialRecovery {
      */
     function approveRecovery(uint256 reqId) public onlyGuardian {
         RecoveryRequest storage req = requests[reqId];
-        require(!req.executed, "SocialRecovery: already executed");
-        require(!requestApprovals[reqId][msg.sender], "SocialRecovery: already approved");
+        require(!req.executed, "SocialRecoveryModule: already executed");
+        require(!requestApprovals[reqId][msg.sender], "SocialRecoveryModule: already approved");
 
         requestApprovals[reqId][msg.sender] = true;
         req.approvals++;
@@ -97,11 +97,11 @@ contract SocialRecovery {
      */
     function executeRecovery(
         uint256 reqId,
-        IIncrementalMerkleTree.ZKPAuth calldata auth
+        IStealthTreeManager.ZKPAuth calldata auth
     ) external onlyGuardian {
         RecoveryRequest storage req = requests[reqId];
-        require(!req.executed, "SocialRecovery: already executed");
-        require(req.approvals >= threshold, "SocialRecovery: not enough approvals");
+        require(!req.executed, "SocialRecoveryModule: already executed");
+        require(req.approvals >= threshold, "SocialRecoveryModule: not enough approvals");
 
         req.executed = true;
 

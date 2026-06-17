@@ -1,0 +1,102 @@
+@startuml architecture_stealth_wallet
+!theme plain
+skinparam roundcorner 10
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam nodesep 40
+skinparam ranksep 50
+
+skinparam component {
+    BackgroundColor #F8FBFF
+    BorderColor #2C6FAC
+    ArrowColor #2C6FAC
+}
+skinparam database {
+    BackgroundColor White
+    BorderColor #4A90D9
+}
+skinparam node {
+    BackgroundColor #F4F6F8
+    BorderColor #A0AAB5
+}
+skinparam package {
+    BackgroundColor transparent
+    BorderColor #888888
+}
+
+title Biểu đồ Kiến trúc Hệ thống Tổng thể - Stealth Wallet
+
+' =====================================
+' Lớp Trình diễn (Frontend Layer)
+' =====================================
+node "Lớp Client (Frontend)" as ClientTier {
+    component "Ví người dùng\n(React.js / Ethers.js)" as ClientApp
+    database "Lưu trữ cục bộ\n(Scan Key, Spend Key)" as LocalDB
+    ClientApp -right- LocalDB : Lưu trữ an toàn
+}
+
+' =====================================
+' Lớp Xử lý Off-chain (Backend Layer)
+' =====================================
+node "Lớp Off-chain (Relayer Backend)" as BackendTier {
+    component "Relayer Server\n(Node.js / Express.js)" as Relayer
+    component "ZK Prover\n(SnarkJS / Circom)" as Prover
+    database "Merkle DB\n(leaves.json)" as MerkleDB
+    
+    Relayer -right- Prover : Yêu cầu sinh\nGroth16 ZK Proof
+    Relayer -left- MerkleDB : Cập nhật Leaf\n& Lọc Merkle Path
+}
+
+' =====================================
+' Lớp On-chain (Blockchain Layer)
+' =====================================
+node "Lớp On-chain (EVM / Sepolia Testnet)" as ChainTier {
+    
+    package "Account Abstraction (ERC-4337)" {
+        component "EntryPoint\n(Smart Contract)" as EntryPoint
+        component "StealthPaymaster\n(Tài trợ phí Gas)" as Paymaster
+    }
+    
+    package "Core Stealth Protocol" {
+        component "Stealth Account Factory" as Factory
+        component "Stealth Account\n(Ví thông minh)" as StealthAccount
+        component "ERC-5564 Announcer\n(Phát sóng sự kiện)" as Announcer
+    }
+    
+    package "Bảo mật ZKP & Phục hồi" {
+        component "MerkleTree Manager" as TreeManager
+        component "SMT Update Verifier" as ZKVerifier
+        component "Social Recovery" as Recovery
+    }
+
+    package "Tiện ích mở rộng" {
+        component "Hệ thống ENS\n(Phân giải Meta-address)" as ENS
+        component "RPC Node\n(Alchemy/Infura)" as RPC
+    }
+}
+
+' =====================================
+' Các kết nối (Relationships)
+' =====================================
+
+' Từ Client
+ClientApp ====> Relayer : REST API (Ủy thác giao dịch, Lấy Proof)
+ClientApp ---> RPC : Quét Sự kiện (Logs) & Số dư
+ClientApp ---> ENS : Lấy Public Keys (Meta-address)
+
+' Từ Relayer
+Relayer ====> EntryPoint : Gửi UserOperation (Kèm ZK Proof)
+
+' Tương tác On-chain
+EntryPoint ---> Paymaster : Kiểm tra quyền tài trợ Gas
+EntryPoint ---> Factory : Triển khai ví Stealth mới (CREATE2)
+EntryPoint ---> StealthAccount : Xác thực (ZKP) & Thực thi giao dịch
+
+StealthAccount ---> Announcer : Phát đi sự kiện (Announcement)
+StealthAccount ---> TreeManager : Đọc Merkle Root (Chống chi tiêu kép)
+
+TreeManager ---> ZKVerifier : Xác minh ZKP (smt_update)
+Recovery ---> TreeManager : Cập nhật Root sau khi phục hồi thành công
+
+@enduml
