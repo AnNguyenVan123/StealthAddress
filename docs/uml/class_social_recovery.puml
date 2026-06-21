@@ -1,0 +1,21 @@
+@startuml
+class RelayerServer <<Server>> {
+  + generateRecoveryProof()
+  + syncTree()
+}
+
+class SocialRecoveryModule <<Smart Contract>> {
+  + guardians: address[]
+  + threshold: uint
+  + proposeRecovery()
+  + approveRecovery()
+  + executeRecovery()
+}
+
+class StealthTreeManager <<Smart Contract>> {
+  + updateRoot()
+}
+
+SocialRecoveryModule "1" --> "1" StealthTreeManager : Cập nhật gốc Merkle
+SocialRecoveryModule .> RelayerServer : Phụ thuộc sinh ZK Proof
+@enduml

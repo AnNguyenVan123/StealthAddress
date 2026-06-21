@@ -1,0 +1,93 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Chương này trình bày chi tiết các nền tảng lý thuyết và công nghệ cốt lõi được áp dụng trong hệ thống ví bảo mật. Đối với từng công nghệ, chương phân tích mục đích sử dụng nhằm giải quyết các yêu cầu nghiệp vụ đã định nghĩa tại Chương 2, đồng thời so sánh với các giải pháp thay thế để làm rõ lý do lựa chọn.
+
+\section{Nền tảng Mật mã học và Giao thức Stealth Address}
+\label{sec:3.1}
+
+\subsection{Lý thuyết Đường cong Elliptic và Giao thức ECDH}
+Nền tảng bảo mật của hệ thống dựa trên Mật mã Đường cong Elliptic (ECC) \cite{ecc}, với độ khó toán học của Bài toán Logarit Rời rạc (ECDLP). Cụ thể, thuật toán sử dụng đường cong \texttt{secp256k1} cho quá trình sinh khóa bí mật và đường cong \texttt{BN254} cho các hàm băm. Ứng dụng quan trọng nhất của ECC trong hệ thống là Giao thức Trao đổi khóa Diffie-Hellman (ECDH), cho phép hai thực thể tính toán ra một bí mật chung (shared secret) $S_{\text{shared}} = r \cdot V$ an toàn qua môi trường công khai mà không làm lộ khóa riêng.
+
+\subsection{Giao thức Stealth Address (ERC-5564)}
+\textbf{Vấn đề giải quyết:} Ở Chương 2 (Mục \ref{section:2.1}), nhu cầu bảo vệ quyền riêng tư yêu cầu phá vỡ liên kết on-chain giữa người gửi và người nhận. Giao thức Stealth Address đảm bảo mỗi giao dịch chuyển tài sản đều sử dụng một địa chỉ dùng một lần (one-time address).
+
+\textbf{Giải pháp thay thế:}
+\begin{itemize}
+    \item \textit{Trộn giao dịch (Mixer - ví dụ Tornado Cash)}: Sử dụng bể thanh khoản chung để xóa dấu vết. Dù mức độ ẩn danh cao, phương pháp này chỉ hỗ trợ mệnh giá cố định, chi phí giao dịch đắt đỏ và đối mặt rủi ro kiểm duyệt cao.
+    \item \textit{Chữ ký vòng (Ring Signature)}: Che giấu người gửi bằng cách gộp chung nhiều chữ ký rác (như trên mạng Monero). Kỹ thuật này không tối ưu trên máy ảo Ethereum (EVM) do chi phí xử lý mật mã on-chain cực lớn.
+\end{itemize}
+
+\textbf{Lý do lựa chọn:} Tiêu chuẩn ERC-5564 \cite{erc5564} cung cấp khuôn khổ chung cho Stealth Address trên Ethereum. Bằng cách kết hợp ERC-5564 với thuật toán ECDH, người gửi tính toán được địa chỉ nhận duy nhất từ Meta-address của người nhận thông qua sự kiện \texttt{Announcement}. Giải pháp này hỗ trợ chuyển số lượng tài sản bất kỳ, tương thích tự nhiên với các hợp đồng thông minh hiện hữu và có chi phí vận hành on-chain thấp.
+
+\section{Hệ thống Chứng minh Không Tiết lộ (Zero-Knowledge Proof)}
+\label{sec:3.2}
+
+\subsection{Hàm băm Poseidon và Cây Merkle}
+\textbf{Vấn đề giải quyết:} Hệ thống cần quản lý danh sách tài khoản hợp lệ một cách phi tập trung trên hợp đồng \texttt{TreeManager}, đồng thời cho phép sinh bằng chứng ZKP chứng minh sự tồn tại của tài khoản mà không làm lộ vị trí chính xác (Mục \ref{section:2.3}).
+
+\textbf{Giải pháp thay thế:}
+\begin{itemize}
+    \item \textit{Quản lý danh sách bằng cấu trúc Mapping trên chuỗi}: Lưu trực tiếp \texttt{mapping(address => uint256)} làm lộ toàn bộ trạng thái số lượng tài khoản và địa chỉ, vi phạm yêu cầu riêng tư.
+    \item \textit{Hàm băm Keccak256/SHA-256 trong Cây Merkle}: Khi chuyển đổi các hàm băm này thành mạch số học (R1CS) cho mạch Circom, chúng tiêu tốn hàng vạn ràng buộc (constraints). Việc này làm tăng chi phí tính toán và thời gian sinh bằng chứng vượt quá khả năng của trình duyệt người dùng.
+\end{itemize}
+
+\textbf{Lý do lựa chọn:} Cấu trúc Cây Merkle thưa (Sparse Merkle Tree) với độ sâu $d=20$ sử dụng hàm băm Poseidon \cite{poseidon} được áp dụng. Poseidon tính toán trực tiếp trên trường hữu hạn $\mathbb{F}_p$, giúp giảm thiểu số lượng ràng buộc trong mạch Circom \texttt{stealth\_spend}, tối ưu hóa đáng kể tốc độ sinh bằng chứng tại client.
+
+\subsection{Hệ chứng minh Groth16}
+\textbf{Vấn đề giải quyết:} Quá trình gọi hàm \texttt{StealthAccount.execute()} để chi tiêu tài sản yêu cầu người dùng xác thực quyền sở hữu thông qua hợp đồng \texttt{StealthSpendVerifier} mà không làm lộ khóa bí mật hay liên kết giao dịch gốc.
+
+\textbf{Giải pháp thay thế:}
+\begin{itemize}
+    \item \textit{zk-STARK}: Không yêu cầu khởi tạo tham số tin cậy (trusted setup) nhưng bằng chứng sinh ra có kích thước lớn, dẫn tới chi phí gas cực cao khi xác minh trên hợp đồng EVM.
+    \item \textit{PLONK}: Hệ chứng minh linh hoạt với universal setup, nhưng thời gian sinh bằng chứng (proving time) lâu hơn Groth16.
+\end{itemize}
+
+\textbf{Lý do lựa chọn:} Hệ chứng minh zk-SNARK Groth16 \cite{groth16} tạo ra bằng chứng có kích thước cố định (khoảng 200 bytes) và có thời gian xác minh on-chain nhanh nhất. EVM hỗ trợ sẵn hàm \textit{precompile} cho phép ghép cặp (pairing) trên đường cong \texttt{BN254}, giúp việc triển khai Groth16 có chi phí xác minh cực rẻ, phù hợp cho mọi thao tác chi tiêu thường xuyên của hệ thống.
+
+\section{Account Abstraction và Kiến trúc Thực thi Giao dịch}
+\label{sec:3.3}
+
+\subsection{Mô hình ERC-4337 và Hợp đồng Paymaster}
+\textbf{Vấn đề giải quyết:} Các tài khoản \texttt{StealthAccount} dùng một lần khi mới khởi tạo không có số dư ETH để trả phí Gas (bài toán Cold Start). Ngoài ra, hệ thống yêu cầu cơ chế gửi giao dịch thông qua Bundler/Relayer để che giấu người khởi tạo (Mục \ref{section:2.2}).
+
+\textbf{Giải pháp thay thế:}
+\begin{itemize}
+    \item \textit{Tài khoản thuộc sở hữu bên ngoài (EOA)}: Gắn chặt với một khóa bí mật cố định, không thể lập trình lại logic xác thực và không có cơ chế trả phí hộ một cách phi tập trung \cite{ethereum_whitepaper}.
+    \item \textit{EIP-3074 / EIP-7702}: Các đề xuất cải tiến cấp độ giao thức cho phép EOA ủy quyền thực thi, nhưng chưa được hỗ trợ hoàn toàn hoặc yêu cầu thay đổi hard-fork từ mạng lưới.
+\end{itemize}
+
+\textbf{Lý do lựa chọn:} Tiêu chuẩn Account Abstraction ERC-4337 \cite{erc4337} thông qua hợp đồng \texttt{EntryPoint} cho phép tách biệt logic xác thực (ZKP trong \texttt{validateUserOp()}) khỏi cơ chế thực thi. Việc áp dụng hợp đồng \texttt{StealthPaymaster} cho phép Relayer thanh toán phí Gas thay cho tài khoản Stealth thông qua \texttt{validatePaymasterUserOp()}, giải quyết triệt để vấn đề Cold Start và tăng cường quyền riêng tư.
+
+\subsection{Triển khai Đơn định với CREATE2}
+\textbf{Vấn đề giải quyết:} Định danh một địa chỉ nhận tiền \texttt{stealthAddress} trước khi hợp đồng tài khoản được triển khai thực sự nhằm tiết kiệm phí khởi tạo (Mục \ref{section:2.2}).
+
+\textbf{Giải pháp thay thế:} \textit{Triển khai hợp đồng ngay lập tức bằng opcode CREATE} gây tốn chi phí Gas cao ở mỗi lần gửi tiền thông qua hợp đồng Factory, lãng phí tài nguyên mạng nếu người dùng chỉ nhận mà không chi tiêu.
+
+\textbf{Lý do lựa chọn:} Thông qua Opcode \texttt{CREATE2} \cite{eip1014}, hợp đồng \texttt{StealthAccountFactory} tính toán trước địa chỉ ví nhận một cách đơn định (deterministic) bằng tham số \texttt{salt} mã hóa từ Meta-address. Hợp đồng chỉ được triển khai thực tế (lazy deployment) thông qua thuộc tính \texttt{initCode} của đối tượng \texttt{UserOperation} vào thời điểm người dùng chi tiêu giao dịch đầu tiên.
+
+\section{Phục hồi Xã hội (Social Recovery)}
+\label{sec:3.4}
+\textbf{Vấn đề giải quyết:} Ở Mục \ref{section:2.1} và \ref{section:2.3}, nhu cầu phục hồi quyền truy cập ví khi mất khóa bí mật được đặt ra, đòi hỏi một phương pháp khôi phục on-chain, an toàn, không phụ thuộc máy chủ tập trung.
+
+\textbf{Giải pháp thay thế:}
+\begin{itemize}
+    \item \textit{Lưu trữ cục bộ Seed Phrase}: Đây là phương pháp đơn giản nhất nhưng chứa rủi ro chí mạng (Single Point of Failure); nếu lộ, mất hoàn toàn tài sản, nếu quên, không có cách lấy lại.
+    \item \textit{Tính toán đa bên (Multi-Party Computation - MPC)}: Phân mảnh khóa và phối hợp ký giao dịch off-chain. Phương pháp này yêu cầu các bên liên tục duy trì kết nối mạng để tạo ra chữ ký đồng thuận, phức tạp trong thiết lập người dùng cuối.
+\end{itemize}
+
+\textbf{Lý do lựa chọn:} Thông qua hợp đồng \texttt{SocialRecoveryModule}, quy trình Phục hồi Xã hội (Social Recovery) lưu trữ sẵn danh sách \texttt{isGuardian}. Khi có rủi ro mất khóa, người dùng gọi hàm \texttt{proposeRecovery()}. Nếu thu thập đủ số lượng phê duyệt \texttt{approveRecovery()} (Threshold), hệ thống gọi \texttt{executeRecovery()} đi kèm bằng chứng ZKP (từ mạch \texttt{smt\_update}) để cập nhật nút lá tương ứng trên Cây Merkle. Cơ chế này trực tiếp vô hiệu hóa khóa cũ và chuyển quyền sở hữu sang khóa mới.
+
+\section{Hệ thống Định danh Phi tập trung (ENS)}
+\label{sec:3.5}
+\textbf{Vấn đề giải quyết:} Ở Mục \ref{section:2.2}, hệ thống yêu cầu một giải pháp định danh thân thiện để thay thế chuỗi Meta-address phức tạp, giúp người gửi thuận tiện khởi tạo giao dịch thông qua giao diện người dùng.
+
+\textbf{Giải pháp thay thế:}
+\begin{itemize}
+    \item \textit{Máy chủ danh bạ truyền thống (Centralized Registry)}: Lập bản đồ ánh xạ trong cơ sở dữ liệu nội bộ. Việc này tạo ra rủi ro kiểm duyệt và đi ngược nguyên lý phi tập trung của kiến trúc blockchain.
+    \item \textit{Unstoppable Domains}: Hệ thống tên miền phi tập trung thay thế, tuy nhiên khả năng tương thích hệ sinh thái kém và ít được sử dụng nguyên bản (native) vào các giao thức DeFi.
+\end{itemize}
+
+\textbf{Lý do lựa chọn:} Ethereum Name Service (ENS) \cite{ens} là tiêu chuẩn định danh de-facto của mạng lưới EVM. Thông qua hợp đồng \texttt{ETHRegistrarController} và \texttt{PublicResolver}, thông tin Meta-address được thiết lập qua hàm \texttt{setText()} thành các bản ghi mở rộng gắn liền với tên miền (ví dụ \texttt{bob.eth}). Giải pháp này bảo đảm tính minh bạch, dễ tra cứu on-chain và trải nghiệm người dùng tối ưu.
+
+\end{document}

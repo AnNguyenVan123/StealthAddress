@@ -1,0 +1,25 @@
+@startuml
+class ClientWallet <<Client>> {
+  + scanPriv: BigInt
+  + spendPriv: BigInt
+  + generateKeys()
+  + computeLeaf(): BigInt
+  + requestRegistration(leaf, addr)
+}
+
+class RelayerServer <<Server>> {
+  + tree: PoseidonSparseMerkleTree
+  + nextIndex: int
+  + registerLeaf(leaf, addr): Response
+  + generateSMTProof()
+  + rollbackLeaf()
+}
+
+class StealthTreeManager <<Smart Contract>> {
+  + currentRoot: bytes32
+  + updateRoot(newRoot, leaf, index, auth)
+}
+
+ClientWallet "1" --> "1" RelayerServer : Gửi yêu cầu API
+RelayerServer "1" --> "1" StealthTreeManager : Gọi giao dịch On-chain
+@enduml

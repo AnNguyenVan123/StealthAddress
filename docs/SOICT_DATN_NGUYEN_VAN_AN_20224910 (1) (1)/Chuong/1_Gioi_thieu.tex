@@ -1,0 +1,44 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+
+\section{Đặt vấn đề}
+\label{section:1.1}
+Blockchain là một hệ thống sổ cái phân tán (distributed ledger) cho phép ghi nhận, lưu trữ và xác thực dữ liệu giao dịch theo cách minh bạch, bất biến và không phụ thuộc vào bên trung gian. Dữ liệu được tổ chức thành các khối liên kết tuần tự bằng cơ chế mật mã học, giúp đảm bảo tính toàn vẹn và khả năng kiểm chứng của toàn bộ lịch sử giao dịch.
+
+Tuy nhiên, chính đặc tính minh bạch và công khai này cũng dẫn đến một thách thức quan trọng trong việc đảm bảo quyền riêng tư của người dùng. Do các hệ thống blockchain thường được thiết kế dưới dạng public ledger, toàn bộ dữ liệu giao dịch có thể được truy cập và phân tích công khai, bao gồm số dư tài khoản, lịch sử giao dịch và mối quan hệ giữa các địa chỉ ví. Điều này làm gia tăng nguy cơ suy luận danh tính người dùng thông qua các kỹ thuật phân tích on-chain, từ đó ảnh hưởng trực tiếp đến tính ẩn danh trong hệ thống.
+
+Hệ quả của việc thiếu cơ chế bảo vệ quyền riêng tư không chỉ dừng lại ở các rủi ro mang tính kỹ thuật, mà còn mở rộng sang nhiều khía cạnh thực tiễn. Cụ thể, người dùng có thể đối mặt với nguy cơ bị tấn công hoặc đe dọa khi tài sản lớn bị nhận diện công khai; doanh nghiệp có thể bị rò rỉ thông tin nhạy cảm liên quan đến dòng tiền, chiến lược kinh doanh hoặc chuỗi cung ứng; trong khi đó, các cá nhân mất đi khả năng kiểm soát thông tin tài chính riêng tư của mình. Bên cạnh đó, yêu cầu tuân thủ các quy định bảo vệ dữ liệu như GDPR cũng đặt ra áp lực đối với việc hạn chế tối đa việc công khai dữ liệu cá nhân trên các hệ thống bất biến.
+
+Do đó, có thể thấy rằng việc bảo vệ quyền riêng tư trong blockchain không chỉ là một yêu cầu kỹ thuật, mà còn là một điều kiện quan trọng nhằm đảm bảo khả năng ứng dụng rộng rãi của công nghệ này trong các lĩnh vực nhạy cảm như tài chính và quản lý dữ liệu.
+
+Từ các phân tích trên, bài toán đặt ra là làm thế nào để vừa tận dụng được các ưu điểm của blockchain như tính minh bạch, bất biến và phi tập trung, vừa đảm bảo được mức độ riêng tư cần thiết cho người dùng trong các giao dịch và hoạt động tài chính.
+
+Cụ thể, các hệ thống blockchain hiện tại chưa cung cấp đầy đủ các cơ chế bảo vệ quyền riêng tư một cách toàn diện. Việc mọi giao dịch đều được công khai khiến cho các thực thể tham gia có thể bị theo dõi, phân tích hành vi và suy luận danh tính. Điều này tạo ra nhu cầu cấp thiết về việc nghiên cứu và phát triển các cơ chế bảo vệ quyền riêng tư hiệu quả hơn, có khả năng giảm thiểu rủi ro rò rỉ thông tin trong khi vẫn đảm bảo tính tương thích với hạ tầng blockchain hiện có.
+
+\section{Mục tiêu và phạm vi đề tài}
+\label{section:1.2}
+
+Mục tiêu của đề tài là nghiên cứu và xây dựng một kiến trúc bảo vệ quyền riêng tư trong giao dịch blockchain, nhằm giảm thiểu khả năng liên kết giữa các giao dịch và tăng cường tính ẩn danh cho người dùng. Hệ thống hướng đến việc cải thiện các hạn chế của các giải pháp hiện tại trong việc cân bằng giữa quyền riêng tư, tính khả dụng và khả năng mở rộng. Bên cạnh đó, đề tài cũng xem xét bài toán quản lý và khôi phục tài khoản trong môi trường ví phi tập trung, đặc biệt là trong các mô hình sử dụng nhiều địa chỉ động.
+
+Phạm vi của đề tài tập trung vào các cơ chế bảo vệ quyền riêng tư trên nền tảng Ethereum, bao gồm các kỹ thuật như Stealth Address, Zero-Knowledge Proofs, cơ chế Relayer và mô hình Account Abstraction. Đồng thời, đề tài cũng nghiên cứu cơ chế Social Recovery dựa trên cấu trúc Merkle Tree nhằm hỗ trợ khôi phục tài khoản trong trường hợp người dùng mất khóa riêng, đảm bảo tính an toàn và khả năng sử dụng trong các hệ thống ví phi tập trung. Đề tài không đi sâu vào việc xây dựng một blockchain mới mà tập trung vào việc thiết kế một lớp giải pháp ứng dụng trên hạ tầng blockchain hiện có.
+\section{Định hướng giải pháp}
+\label{section:1.3}
+
+Để giải quyết bài toán đã nêu, đề tài định hướng tiếp cận theo hướng kết hợp nhiều công nghệ bảo vệ quyền riêng tư và quản lý tài khoản hiện đại trong blockchain. Cụ thể, hệ thống sẽ sử dụng Stealth Address để tăng cường tính ẩn danh của người nhận, Zero-Knowledge Proofs để xác thực giao dịch mà không tiết lộ thông tin nhạy cảm, cơ chế Relayer để hỗ trợ thanh toán phí giao dịch nhằm giảm rò rỉ thông tin định danh, và Account Abstraction để tăng tính linh hoạt trong quản lý tài khoản và cải thiện trải nghiệm người dùng.
+
+Bên cạnh đó, hệ thống tích hợp cơ chế Social Recovery dựa trên Merkle Tree nhằm hỗ trợ khôi phục tài khoản một cách an toàn và tối ưu chi phí lưu trữ on-chain. Giải pháp này cho phép xác minh tập hợp các thực thể khôi phục (guardians) thông qua Merkle proof, từ đó giảm thiểu chi phí và tăng khả năng mở rộng trong quá trình quản lý tài khoản.
+
+Giải pháp được đề xuất nhằm xây dựng một kiến trúc thống nhất, có khả năng vừa bảo vệ quyền riêng tư ở mức giao dịch và tài khoản, vừa đảm bảo khả năng sử dụng thực tế và cơ chế khôi phục an toàn trong các ứng dụng blockchain hiện đại.
+\section{Bố cục của đồ án}
+Nội dung đồ án được chia thành 6 chương:
+\begin{itemize}
+    \item \textbf{Chương 1:} Giới thiệu tổng quan về đề tài, lý do chọn đề tài và mục tiêu.
+    \item \textbf{Chương 2:} Khảo sát các hệ thống hiện tại và phân tích yêu cầu bài toán.
+    \item \textbf{Chương 3:} Trình bày nền tảng lý thuyết mật mã học, kiến trúc Account Abstraction và ZK-Proof.
+    \item \textbf{Chương 4:} Phân tích thiết kế hệ thống, mô hình dữ liệu và triển khai thực nghiệm.
+    \item \textbf{Chương 5:} Đi sâu vào các giải pháp kỹ thuật và đóng góp nổi bật nhất của đồ án.
+    \item \textbf{Chương 6:} Tổng kết kết quả đạt được và định hướng phát triển tương lai.
+\end{itemize}
+
+\end{document}

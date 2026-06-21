@@ -1,0 +1,19 @@
+@startuml
+left to right direction
+actor "Chủ sở hữu" as Owner
+actor "Guardian" as Guardian
+
+package "Phục hồi Xã hội" {
+  usecase "Thiết lập Guardian" as UC1
+  usecase "Đề xuất Phục hồi" as UC2
+  usecase "Bỏ phiếu Phê duyệt" as UC3
+  usecase "Thực thi Phục hồi On-chain" as UC4
+  usecase "Khôi phục Quyền Chi tiêu" as UC5
+}
+
+Owner --> UC1
+Owner --> UC5
+Guardian --> UC2
+Guardian --> UC3
+Guardian --> UC4
+@enduml

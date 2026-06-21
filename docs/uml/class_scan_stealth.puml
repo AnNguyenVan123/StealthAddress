@@ -1,0 +1,19 @@
+@startuml
+class ScannerEngine <<Client>> {
+  + scanPriv: BigInt
+  + fetchAnnouncements(fromBlock, toBlock)
+  + processEvent(event)
+  + checkOwnership()
+}
+
+class LocalStorage <<Client DB>> {
+  + saveDiscoveredAccount()
+}
+
+class RPCNode <<External Node>> {
+  + getLogs(filter)
+}
+
+ScannerEngine "1" --> "1" RPCNode : Truy vấn dữ liệu On-chain
+ScannerEngine "1" --> "1" LocalStorage : Lưu kết quả
+@enduml

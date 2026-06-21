@@ -46,7 +46,14 @@ export async function updateRootOnChain(
             proofRes
         );
 
-        const tx = await contract.updateRoot(newRootHex, newLeafHex, leafIndex, auth);
+        const feeData = await contract.runner.provider.getFeeData();
+        const maxFeePerGas = feeData.maxFeePerGas ? (feeData.maxFeePerGas * 2n) : undefined;
+        const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * 2n) : undefined;
+
+        const tx = await contract.updateRoot(newRootHex, newLeafHex, leafIndex, auth, {
+            maxFeePerGas,
+            maxPriorityFeePerGas
+        });
         const receipt = await tx.wait();
         console.log(`[✅] Root updated on-chain! Tx: ${receipt.hash}`);
         return receipt.hash;

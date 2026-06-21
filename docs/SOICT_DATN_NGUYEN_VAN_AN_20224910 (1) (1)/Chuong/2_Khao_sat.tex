@@ -1,0 +1,395 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+\section{Khảo sát hiện trạng}
+\label{section:2.1}
+
+Khảo sát hiện trạng dựa trên ba nguồn: (i) nhu cầu thực tế của người dùng trong hệ sinh thái blockchain, (ii) đặc điểm kiến trúc của các nền tảng blockchain công khai, và (iii) các giải pháp bảo vệ quyền riêng tư đã được triển khai. Ba hệ thống được phân tích là Tornado Cash, Umbra Cash và Nocturne, đại diện cho ba hướng tiếp cận khác nhau: trộn giao dịch, stealth address và private account abstraction.
+
+\textbf{(i) Nhu cầu thực tế của người dùng}
+
+Trong hệ sinh thái Web3, người dùng có nhu cầu: ẩn danh lịch sử giao dịch, hạn chế khả năng liên kết giữa các địa chỉ ví, che giấu mối quan hệ giữa các bên giao dịch, và giảm khả năng bị phân tích hành vi on-chain. Bên cạnh đó, việc phụ thuộc hoàn toàn vào private key hoặc seed phrase khiến người dùng đối mặt với rủi ro mất tài sản vĩnh viễn khi mất khóa, dẫn đến nhu cầu về cơ chế khôi phục tài khoản phi tập trung (decentralized recovery).
+
+\textbf{(ii) Đặc điểm của hệ thống blockchain công khai}
+
+Các blockchain công khai như Ethereum hoạt động theo mô hình minh bạch trạng thái: mọi tài khoản, số dư và giao dịch (sender, receiver, value, gas fee, calldata) đều công khai, tạo điều kiện cho các kỹ thuật phân tích như address clustering (nhóm địa chỉ cùng chủ sở hữu), flow analysis (phân tích luồng tài sản) và temporal analysis (phân tích thời gian giao dịch). Account Abstraction (EIP-4337) cải thiện khả năng tùy biến logic tài khoản nhưng không giải quyết bài toán ẩn danh dữ liệu giao dịch.
+
+\textbf{(iii) Phân tích các giải pháp hiện có}
+
+\textbf{Tornado Cash}
+
+Tornado Cash là giao thức trộn giao dịch (\textit{transaction mixing}) kết hợp zk-SNARK, hoạt động theo mô hình \textit{pool-based mixer}: nhiều người dùng gửi tài sản vào một pool chung theo mệnh giá cố định (ví dụ 0.1 ETH, 1 ETH, 10 ETH) và có thể rút đến địa chỉ bất kỳ mà không lộ liên hệ với địa chỉ nạp. Mức độ riêng tư tỉ lệ thuận với kích thước pool (anonymity set).
+
+\textit{Quy trình deposit}: hệ thống sinh cặp giá trị \textit{secret} (chứng minh quyền sở hữu) và \textit{nullifier} (ngăn chi tiêu hai lần), băm bằng Pedersen Hash thành \textit{commitment}, sau đó chèn commitment vào Merkle Tree on-chain. Người dùng nhận \textit{private note} làm bằng chứng sở hữu.
+
+\textit{Quy trình withdraw}: người dùng dùng private note sinh bằng chứng zk-SNARK chứng minh đồng thời: commitment tồn tại trong Merkle Tree, commitment chưa được sử dụng, và người dùng sở hữu secret tương ứng — mà không tiết lộ vị trí commitment hay danh tính. Nullifier được băm bằng MiMC thành \textit{nullifier hash} công khai; hệ thống từ chối giao dịch nếu nullifier hash đã xuất hiện, đảm bảo mỗi khoản deposit chỉ rút được một lần. Smart contract chỉ lưu Merkle root, không lưu đường dẫn từng commitment, nên zk-SNARK cho phép xác minh tính hợp lệ mà không lộ vị trí commitment trong cây.
+
+Mức độ riêng tư phụ thuộc vào hành vi người dùng: dùng địa chỉ mới khi rút, dùng relayer trả gas, chờ đủ lâu giữa deposit và withdraw, rút khi pool đã có nhiều giao dịch khác.
+
+\textit{Đánh giá}: Tornado Cash đạt mức ẩn danh cao, phá vỡ liên kết gửi–nhận, không cần bên trung gian tin cậy, tương thích hạ tầng Ethereum. Hạn chế: chỉ phù hợp giao dịch chuyển tài sản đơn giản, mệnh giá cố định làm giảm tính linh hoạt, không hỗ trợ tương tác phức tạp với DeFi, chi phí sinh bằng chứng cao, và mức riêng tư phụ thuộc vào kích thước pool cũng như hành vi người dùng.
+
+\textbf{Umbra Cash}
+
+Umbra Cash là giao thức thanh toán riêng tư (\textit{stealth payment protocol}) cho mạng EVM, bảo vệ danh tính người nhận bằng cách tạo địa chỉ nhận mới (\textit{fresh address}) cho mỗi giao dịch, dựa hoàn toàn trên mật mã đường cong elliptic (ECC), không dùng mixer hay zero-knowledge proof. Cơ chế stealth address vốn được Monero áp dụng, sau đó mở rộng sang Ethereum.
+
+\textit{Kiến trúc khóa}: từ chữ ký trên một thông điệp bằng khóa Ethereum hiện tại, hệ thống sinh hai khóa riêng — \textit{Spending Key} (kiểm soát, chi tiêu tài sản) và \textit{Viewing Key} (quét và phát hiện thanh toán) — cùng hai khóa công khai tương ứng, lưu on-chain qua hợp đồng \textit{StealthKeyRegistry}.
+
+\textit{Quy trình thanh toán}: (1) người gửi truy vấn StealthKeyRegistry lấy khóa công khai của người nhận qua địa chỉ, ENS hoặc CNS; (2) sinh giá trị ngẫu nhiên dùng một lần $r$; (3) dùng ECDH kết hợp $r$ với spending public key tạo stealth address mới; (4) mã hóa $r$ bằng viewing public key; (5) gửi tài sản tới stealth address qua hợp đồng Umbra, đồng thời phát sinh \textit{Announcement Event} chứa stealth address và $r$ đã mã hóa.
+
+\textit{Phát hiện giao dịch}: người nhận quét các Announcement Event, dùng viewing private key giải mã $r$, kết hợp $r$ với spending private key để tính stealth private key, rồi kiểm tra khớp với stealth address công bố. Nếu khớp, người nhận ký giao dịch trực tiếp hoặc qua relayer để rút tài sản.
+
+Umbra không che giấu địa chỉ người gửi và giá trị giao dịch; tập ẩn danh về lý thuyết là toàn bộ địa chỉ đã công bố khóa công khai, nhưng bị thu hẹp nếu dùng ENS hoặc rút tiền không an toàn.
+
+\textit{Đánh giá}: ưu điểm là chi phí tính toán thấp (không zk-proof, không mixer), tương thích trực tiếp với Ethereum, bảo vệ hiệu quả danh tính người nhận, hỗ trợ relayer. Hạn chế: không che giấu người gửi, giá trị giao dịch và metadata; người nhận phải liên tục quét blockchain; rút tiền về địa chỉ công khai làm giảm mức riêng tư; không đạt mức ẩn danh toàn diện như các giải pháp zero-knowledge.
+
+\textbf{Nocturne}
+
+Nocturne là giao thức \textit{private account abstraction} trên Ethereum, cho phép thực hiện lời gọi smart contract (không chỉ chuyển tài sản) một cách ẩn danh. Hệ thống xây dựng lớp tài khoản riêng tư trên hạ tầng Ethereum: tài sản nạp vào được lưu dưới dạng \textit{private note} gắn với stealth address, quyền sở hữu được chứng minh bằng zero-knowledge proof khi tương tác với dApp.
+
+\textit{Deposit}: tài sản gửi tới stealth address của người dùng nhưng trước hết được giữ tại smart contract trung gian \textit{Deposit Manager}. Một thực thể off-chain gọi là \textit{Screener} đánh giá rủi ro tuân thủ; chỉ khoản tiền đạt ngưỡng mới được xác nhận và tạo note commitment đại diện quyền sở hữu.
+
+\textit{Thực hiện giao dịch}: mọi thao tác được khởi tạo qua smart contract trung tâm \textit{Teller}. Người dùng tạo \textit{Operation} mô tả tài sản sử dụng, các private note bị tiêu thụ, chuỗi lời gọi smart contract, và bằng chứng zero-knowledge. Teller xác minh: người dùng sở hữu tài sản khai báo, các note chưa từng dùng, đầu vào/đầu ra hợp lệ — sau đó chuyển xử lý cho \textit{Handler}.
+
+\textit{Thực thi}: Handler không lưu trữ tài sản người dùng (tài sản giữ tại Teller); Teller chỉ cấp đúng lượng tài sản cần cho Operation, Handler thực hiện chuỗi contract calls. Sau khi hoàn tất, số dư còn lại và tài sản phát sinh được gửi ngược về Teller, Teller tạo note commitment mới gán cho stealth address người dùng.
+
+\textit{Đánh giá}: ưu điểm là hỗ trợ tương tác riêng tư với DeFi và smart contract tổng quát, che giấu liên hệ giữa danh tính và hoạt động on-chain, kết hợp account abstraction, stealth address và zero-knowledge proof trong một kiến trúc thống nhất. Hạn chế: kiến trúc nhiều thành phần on-chain/off-chain phức tạp, chi phí sinh và xác minh zero-knowledge proof cao, Screener làm giảm mức độ phi tập trung, thời gian xử lý giao dịch tăng do nhiều bước xác minh.
+
+\textbf{(iv) Tổng hợp đánh giá}
+
+Mỗi hệ thống giải quyết một khía cạnh của bài toán quyền riêng tư: Tornado Cash ẩn danh dòng tiền bằng mixing và zk-SNARK; Umbra Cash ẩn danh người nhận bằng stealth address dựa trên ECC; Nocturne ẩn danh trạng thái tài khoản bằng private account abstraction. Cả ba đều đánh đổi giữa bảo mật, khả năng mở rộng và khả năng tương thích hệ sinh thái hiện tại. Đề tài hướng tới kết hợp stealth address, zero-knowledge proof, relayer và account abstraction trong một kiến trúc thống nhất, nhằm cải thiện đồng thời quyền riêng tư, khả năng sử dụng và tính linh hoạt.
+
+
+\section{Tổng quan chức năng}
+\label{section:2.2}
+
+Hệ thống là một ví blockchain bảo vệ quyền riêng tư trên nền tảng Ethereum, cho phép người dùng thực hiện giao dịch tài sản số trong khi hạn chế công khai thông tin định danh và mối liên hệ giữa các giao dịch. Hệ thống gồm hai nhóm chức năng chính: bảo vệ quyền riêng tư trong giao dịch, và quản lý tài khoản người dùng.
+
+Nhóm chức năng bảo vệ quyền riêng tư sử dụng stealth address để tạo địa chỉ nhận dùng một lần cho mỗi giao dịch, kết hợp zero-knowledge proof để chứng minh quyền sở hữu tài sản mà không tiết lộ thông tin nhạy cảm. Hệ thống tích hợp relayer để gửi giao dịch và trả phí gas thay người dùng, hạn chế rò rỉ định danh. Hệ thống áp dụng Account Abstraction để tách logic xác thực khỏi cơ chế thực thi giao dịch truyền thống, làm tiền đề cho các tính năng như social recovery.
+
+Nhóm chức năng quản lý tài khoản gồm: đăng ký và khởi tạo ví, quản lý khóa mật mã, theo dõi tài sản, quét và phát hiện stealth address thuộc sở hữu người dùng, và thiết lập danh sách guardian phục vụ khôi phục tài khoản. Cơ chế Social Recovery cho phép một tập guardian đáng tin cậy hỗ trợ khôi phục quyền kiểm soát tài khoản (bằng cách cập nhật cây Merkle của danh tính ẩn danh) khi mất khóa, thay vì phụ thuộc hoàn toàn vào seed phrase.
+
+Các chức năng chính:
+
+\begin{itemize}
+\item Khởi tạo và quản lý ví riêng tư.
+\item Đăng ký và quản lý khóa stealth.
+\item Tạo và quản lý stealth address.
+\item Quét và phát hiện tài sản thuộc quyền sở hữu của người dùng.
+\item Thực hiện giao dịch tài sản riêng tư.
+\item Sinh và xác minh bằng chứng không tiết lộ thông tin.
+\item Thực hiện giao dịch thông qua relayer.
+\item Quản lý tài sản và lịch sử giao dịch.
+\item Thiết lập guardian cho cơ chế Social Recovery.
+\item Khôi phục tài khoản thông qua Social Recovery.
+\end{itemize}
+
+\subsection{Biểu đồ use case tổng quát}
+\label{subsection:2.2.1}
+
+Biểu đồ use case tổng quát được trình bày trong Hình \ref{fig:general_usecase}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{Hinhve/usecase_diagram_123.png}
+    \caption{Biểu đồ use case tổng quát của hệ thống}
+    \label{fig:general_usecase}
+\end{figure}
+
+Hệ thống có năm tác nhân chính:
+
+\begin{itemize}
+    \item \textbf{Người gửi (Sender):} dùng thông tin định danh công khai hoặc ENS của người nhận để tính stealth address và khởi tạo giao dịch ẩn danh.
+
+    \item \textbf{Người nhận (Receiver):} chủ sở hữu ví ẩn danh; tạo/nhập ví, đăng ký ENS, cấu hình guardian, quét tài sản nhận và chi tiêu tài sản.
+
+    \item \textbf{Guardian:} thực thể được người nhận chỉ định trước, phê duyệt yêu cầu khôi phục khi người nhận mất quyền truy cập ví.
+
+    \item \textbf{Hệ thống Relayer \& Paymaster:} gửi giao dịch thay người dùng và trả phí gas, giảm khả năng liên kết danh tính ví với giao dịch on-chain.
+
+    \item \textbf{Hệ thống ENS:} cung cấp định danh phi tập trung, cho phép đăng ký/liên kết tên miền ENS với meta-address và tra cứu thông tin người nhận.
+\end{itemize}
+
+Các use case chính:
+
+\begin{itemize}
+    \item \textbf{Tạo/Nhập ví ẩn danh:} khởi tạo ví mới hoặc khôi phục ví, sinh và lưu trữ khóa phục vụ Stealth Address và Account Abstraction.
+    \item \textbf{Cấu hình Guardian:} thiết lập và triển khai hợp đồng chứa danh sách guardian cho Social Recovery.
+    \item \textbf{Đăng ký và liên kết ENS:} liên kết tên miền ENS với meta-address.
+    \item \textbf{Gửi tài sản ẩn danh:} chuyển tài sản qua stealth address tạo từ meta-address hoặc ENS, bao gồm xử lý giao dịch ẩn danh.
+    \item \textbf{Quét tài sản nhận:} phát hiện stealth address thuộc sở hữu người dùng và cập nhật số dư.
+    \item \textbf{Chi tiêu tài sản:} thực hiện giao dịch từ tài sản đã nhận, dùng zero-knowledge proof xác minh quyền sở hữu.
+    \item \textbf{Xử lý giao dịch ẩn danh (ZKP và trả gas):} uỷ thác tính toán bằng chứng Zero-Knowledge và giao việc gửi giao dịch, trả gas cho Relayer \& Paymaster.
+    \item \textbf{Phục hồi tài khoản:} lấy lại quyền truy cập khi mất khóa, cần xác nhận từ guardian.
+\end{itemize}
+
+Hệ thống được chia thành ba nhóm chức năng chính: quản lý tài khoản, thực hiện giao dịch ẩn danh, và bảo mật hỗ trợ tài khoản. Các nhóm này được đặc tả chi tiết trong các mục tiếp theo.
+
+\subsection{Quy trình nghiệp vụ}
+\label{subsection:2.2.3}
+
+Hai quy trình nghiệp vụ trung tâm của hệ thống là: (i) giao dịch tài sản ẩn danh và (ii) phục hồi tài khoản bằng Social Recovery.
+
+\subsubsection{Quy trình giao dịch tài sản ẩn danh}
+
+Người gửi nhập meta-address hoặc ENS của người nhận; nếu dùng ENS, hệ thống tra cứu meta-address tương ứng. Hệ thống tính toán stealth address dùng một lần cho giao dịch hiện tại. Người gửi chọn loại tài sản và số lượng; hệ thống xây dựng giao dịch và chuyển dữ liệu tới Relayer. Nhằm giảm tải tính toán cho thiết bị người dùng (client-side), Relayer sẽ hỗ trợ tính toán và sinh bằng chứng Zero-Knowledge Proof (ZKP) cần thiết, sau đó đóng gói gửi lên blockchain và trả phí gas. Sau khi giao dịch được xác nhận, người nhận quét sự kiện on-chain bằng viewing key; nếu phát hiện stealth address thuộc sở hữu, hệ thống giải mã thông tin và cập nhật số dư.
+
+\subsubsection{Quy trình phục hồi tài khoản bằng Social Recovery}
+
+Người dùng thiết lập danh sách guardian và ngưỡng xác nhận tối thiểu thông qua một hợp đồng phục hồi độc lập trên blockchain. Khi mất quyền truy cập, người dùng gửi yêu cầu phục hồi kèm khóa xác thực mới; hệ thống thông báo các guardian đã đăng ký. Mỗi guardian xác minh và phê duyệt hoặc từ chối yêu cầu. Nếu số lượng phê duyệt đạt ngưỡng, hệ thống cập nhật khóa xác thực mới và chuyển quyền kiểm soát tài khoản cho người dùng; ngược lại yêu cầu bị từ chối và tài khoản không thay đổi.
+
+
+\section{Đặc tả chức năng}
+\label{section:2.3}
+
+Từ biểu đồ use case tổng quát ở Hình \ref{fig:general_usecase}, đồ án đặc tả chi tiết sáu use case cốt lõi: (i) Tạo/Nhập ví ẩn danh, (ii) Đăng ký và liên kết ENS, (iii) Gửi tài sản ẩn danh, (iv) Quét tài sản nhận, (v) Cấu hình người giám hộ, (vi) Phục hồi tài khoản.
+
+\subsection{Đặc tả Use Case: Tạo/Nhập ví ẩn danh}
+
+\begin{table}[H]
+\centering
+\caption{Đặc tả use case Tạo/Nhập ví ẩn danh}
+\begin{tabular}{|p{4cm}|p{10cm}|}
+\hline
+\textbf{Tên use case} & Tạo/Nhập ví ẩn danh \\ \hline
+\textbf{Tác nhân} & Người nhận (Receiver) \\ \hline
+\textbf{Mô tả} & Cho phép người dùng tạo mới hoặc nhập lại ví riêng tư. \\ \hline
+\textbf{Tiền điều kiện} & Người dùng chưa đăng nhập vào hệ thống. \\ \hline
+\textbf{Hậu điều kiện} & Ví được tạo hoặc khôi phục thành công, người dùng có thể sử dụng hệ thống. \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Luồng sự kiện chính:}
+
+\begin{enumerate}
+    \item Người dùng chọn chức năng tạo ví mới hoặc nhập ví.
+    \item Hệ thống hiển thị giao diện khởi tạo ví.
+    \item Người dùng chọn phương thức khởi tạo.
+    \item Nếu tạo mới, hệ thống sinh cặp khóa bí mật và meta-address.
+    \item Nếu nhập ví, người dùng nhập seed phrase hoặc private key.
+    \item Hệ thống kiểm tra tính hợp lệ của dữ liệu nhập.
+    \item Hệ thống lưu trữ thông tin ví cục bộ.
+    \item Hệ thống chuyển người dùng tới màn hình Dashboard.
+\end{enumerate}
+
+\textbf{Luồng phát sinh:} Tại bước 5, nếu seed phrase hoặc private key không hợp lệ, hệ thống thông báo lỗi và yêu cầu nhập lại.
+
+%===================================================
+
+\subsection{Đặc tả Use Case: Đăng ký và liên kết ENS}
+
+\begin{table}[H]
+\centering
+\caption{Đặc tả use case Đăng ký và liên kết ENS}
+\begin{tabular}{|p{4cm}|p{10cm}|}
+\hline
+\textbf{Tên use case} & Đăng ký và liên kết ENS \\ \hline
+\textbf{Tác nhân} & Người nhận (Receiver) \\ \hline
+\textbf{Mô tả} & Liên kết meta-address với tên miền ENS. \\ \hline
+\textbf{Tiền điều kiện} & Người dùng đã đăng nhập và sở hữu tên miền ENS hợp lệ. \\ \hline
+\textbf{Hậu điều kiện} & Meta-address được công bố và liên kết với ENS thành công. \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Luồng sự kiện chính:}
+
+\begin{enumerate}
+    \item Người dùng truy cập chức năng liên kết ENS.
+    \item Hệ thống yêu cầu nhập tên miền ENS.
+    \item Người dùng nhập tên miền mong muốn.
+    \item Hệ thống kiểm tra quyền sở hữu ENS.
+    \item Hệ thống đăng ký thông tin meta-address lên blockchain.
+    \item Hệ thống thông báo liên kết thành công.
+\end{enumerate}
+
+\textbf{Luồng phát sinh:} Nếu người dùng không sở hữu tên miền ENS, hệ thống từ chối liên kết. Nếu giao dịch blockchain thất bại, hệ thống thông báo lỗi và yêu cầu thực hiện lại.
+
+%===================================================
+
+\subsection{Đặc tả Use Case: Gửi tài sản ẩn danh}
+
+\begin{table}[H]
+\centering
+\caption{Đặc tả use case Gửi tài sản ẩn danh}
+\begin{tabular}{|p{4cm}|p{10cm}|}
+\hline
+\textbf{Tên use case} & Gửi tài sản ẩn danh \\ \hline
+\textbf{Tác nhân} & Người gửi (Sender) \\ \hline
+\textbf{Mô tả} & Gửi tài sản tới người nhận thông qua stealth address. \\ \hline
+\textbf{Tiền điều kiện} & Người gửi sở hữu đủ số dư tài sản và biết ENS hoặc meta-address của người nhận. \\ \hline
+\textbf{Hậu điều kiện} & Tài sản được chuyển tới địa chỉ stealth của người nhận. \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Luồng sự kiện chính:}
+
+\begin{enumerate}
+    \item Người gửi chọn chức năng gửi tài sản.
+    \item Người gửi nhập ENS hoặc meta-address của người nhận.
+    \item Hệ thống truy vấn ENS để lấy meta-address.
+    \item Hệ thống tính toán stealth address tương ứng.
+    \item Người gửi nhập loại tài sản và số lượng cần gửi.
+    \item Yêu cầu giao dịch được chuyển tới Relayer.
+    \item Relayer hỗ trợ tính toán và sinh bằng chứng ZK nhằm giảm tải cho client.
+    \item Relayer gửi giao dịch lên blockchain.
+    \item Hệ thống thông báo giao dịch thành công.
+\end{enumerate}
+
+\textbf{Luồng phát sinh:} Nếu ENS không tồn tại, hệ thống thông báo lỗi. Nếu số dư không đủ, giao dịch bị từ chối. Nếu bằng chứng ZK không hợp lệ, giao dịch không được thực hiện.
+
+%===================================================
+
+\subsection{Đặc tả Use Case: Quét tài sản nhận}
+
+\begin{table}[H]
+\centering
+\caption{Đặc tả use case Quét tài sản nhận}
+\begin{tabular}{|p{4cm}|p{10cm}|}
+\hline
+\textbf{Tên use case} & Quét tài sản nhận \\ \hline
+\textbf{Tác nhân} & Người nhận (Receiver) \\ \hline
+\textbf{Mô tả} & Phát hiện và hiển thị các tài sản thuộc quyền sở hữu người dùng. \\ \hline
+\textbf{Tiền điều kiện} & Người dùng đã đăng nhập vào hệ thống. \\ \hline
+\textbf{Hậu điều kiện} & Danh sách tài sản được cập nhật. \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Luồng sự kiện chính:}
+
+\begin{enumerate}
+    \item Người dùng chọn chức năng quét tài sản.
+    \item Hệ thống quét các sự kiện Announce trên blockchain.
+    \item Hệ thống dùng viewing key để kiểm tra từng thông báo.
+    \item Nếu tìm thấy stealth address tương ứng, hệ thống xác nhận quyền sở hữu.
+    \item Hệ thống cập nhật số dư và hiển thị tài sản.
+\end{enumerate}
+
+\textbf{Luồng phát sinh:} Nếu không phát hiện tài sản mới, hệ thống hiển thị danh sách hiện tại. Nếu xảy ra lỗi kết nối blockchain, hệ thống yêu cầu người dùng thử lại.
+
+%===================================================
+
+\subsection{Đặc tả Use Case: Cấu hình người giám hộ}
+
+\begin{table}[H]
+\centering
+\caption{Đặc tả use case Cấu hình người giám hộ}
+\begin{tabular}{|p{4cm}|p{10cm}|}
+\hline
+\textbf{Tên use case} & Cấu hình người giám hộ \\ \hline
+\textbf{Tác nhân} & Người nhận (Receiver) \\ \hline
+\textbf{Mô tả} & Khởi tạo danh sách guardian cố định qua hợp đồng phục hồi. \\ \hline
+\textbf{Tiền điều kiện} & Người dùng đã đăng nhập và chưa cấu hình guardian. \\ \hline
+\textbf{Hậu điều kiện} & Hợp đồng phục hồi được triển khai và liên kết thành công. \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Luồng sự kiện chính:}
+
+\begin{enumerate}
+    \item Người dùng truy cập chức năng quản lý guardian.
+    \item Hệ thống hiển thị danh sách guardian hiện tại.
+    \item Người dùng nhập danh sách các địa chỉ guardian và ngưỡng xác nhận (threshold).
+    \item Hệ thống xác thực tính hợp lệ của các địa chỉ.
+    \item Hệ thống triển khai hợp đồng Social Recovery mới với danh sách guardian cố định.
+    \item Hệ thống liên kết hợp đồng phục hồi này với tài khoản ẩn danh của người dùng.
+\end{enumerate}
+
+\textbf{Luồng phát sinh:} Nếu địa chỉ guardian không hợp lệ hoặc giao dịch thất bại, hợp đồng không được triển khai và hệ thống thông báo lỗi.
+
+%===================================================
+
+\subsection{Đặc tả Use Case: Phục hồi tài khoản}
+
+\begin{table}[H]
+\centering
+\caption{Đặc tả use case Phục hồi tài khoản}
+\begin{tabular}{|p{4cm}|p{10cm}|}
+\hline
+\textbf{Tên use case} & Phục hồi tài khoản \\ \hline
+\textbf{Tác nhân} & Người nhận (Receiver), Guardian \\ \hline
+\textbf{Mô tả} & Khôi phục quyền kiểm soát tài khoản khi người dùng mất khóa truy cập. \\ \hline
+\textbf{Tiền điều kiện} & Người dùng đã thiết lập guardian trước đó. \\ \hline
+\textbf{Hậu điều kiện} & Quyền kiểm soát tài khoản được chuyển sang khóa mới. \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Luồng sự kiện chính:}
+
+\begin{enumerate}
+    \item Người dùng khởi tạo yêu cầu phục hồi.
+    \item Hệ thống gửi yêu cầu xác nhận tới các guardian.
+    \item Các guardian xem xét và phê duyệt yêu cầu.
+    \item Khi đủ số lượng xác nhận tối thiểu, hệ thống xác minh bằng chứng Zero-Knowledge (ZKP). Bằng chứng này nhằm chứng minh tính hợp lệ của cấu trúc cây Merkle mới sau khi thay thế khóa cũ bằng khóa mới.
+    \item Hệ thống cập nhật gốc cây Merkle (Merkle Root) toàn cục trên hợp đồng quản lý (TreeManager) nhằm ghi nhận khóa xác thực mới cho tài khoản.
+    \item Người dùng lấy lại quyền truy cập và chi tiêu tài sản bằng khóa mới.
+\end{enumerate}
+
+\textbf{Luồng phát sinh:} Nếu không đủ số lượng guardian phê duyệt, quá trình phục hồi bị hủy. Nếu bằng chứng ZKP để cập nhật cây Merkle không hợp lệ, yêu cầu phục hồi bị từ chối.
+
+
+\section{Yêu cầu phi chức năng}
+\label{section:2.4}
+
+\subsection{Tính riêng tư (Privacy)}
+
+\begin{itemize}
+\item Tạo Stealth Address dùng một lần cho mỗi giao dịch, ngăn liên kết nhiều giao dịch với cùng một người nhận.
+\item Xác thực quyền sở hữu và chi tiêu tài sản bằng Zero-Knowledge Proof, không làm lộ dữ liệu nhạy cảm.
+\item Hạn chế công khai địa chỉ ví chính, khóa công khai và lịch sử giao dịch.
+\item Relayer và Paymaster che giấu mối liên hệ giữa địa chỉ thực hiện giao dịch và địa chỉ chịu phí gas.
+\end{itemize}
+
+\subsection{Bảo mật (Security)}
+
+\begin{itemize}
+\item Mọi thao tác liên quan đến tài sản phải được xác thực bằng khóa mật mã hợp lệ.
+\item Private key, seed phrase, spending key không được lưu dưới dạng văn bản thuần.
+\item Hệ thống phải ngăn chặn double spending.
+\item Social Recovery yêu cầu số lượng guardian xác nhận tối thiểu trước khi khôi phục.
+\item Hệ thống xác minh tính hợp lệ của bằng chứng ZKP trước khi tiến hành thay đổi khóa (cập nhật cây Merkle) để hoàn tất yêu cầu phục hồi.
+\item Smart contract được thiết kế nhằm giảm thiểu các lỗ hổng phổ biến: reentrancy, replay attack, unauthorized access.
+\end{itemize}
+
+\subsection{Hiệu năng (Performance)}
+
+\begin{itemize}
+\item Thời gian tạo Stealth Address đủ nhanh để không ảnh hưởng trải nghiệm người dùng.
+\item Thời gian sinh và xác minh Zero-Knowledge Proof được tối ưu nhằm giảm độ trễ giao dịch.
+\item Quá trình quét blockchain để phát hiện tài sản nhận phải hiệu quả khi số lượng giao dịch tăng.
+\item Hệ thống tối ưu số lượng giao dịch on-chain để giảm chi phí gas.
+\end{itemize}
+
+\subsection{Khả năng mở rộng (Scalability)}
+
+\begin{itemize}
+\item Hỗ trợ quản lý đồng thời nhiều tài khoản Stealth Address.
+\item Cơ chế quét và phát hiện tài sản hoạt động hiệu quả khi số lượng sự kiện blockchain lớn.
+\item Kiến trúc hệ thống cho phép tích hợp thêm các loại tài sản hoặc chuẩn token mới.
+\item Hỗ trợ mở rộng sang các mạng blockchain tương thích EVM khác.
+\end{itemize}
+
+\subsection{Độ tin cậy (Reliability)}
+
+\begin{itemize}
+\item Đảm bảo tính nhất quán giữa dữ liệu lưu trữ cục bộ và dữ liệu trên blockchain.
+\item Có khả năng khôi phục trạng thái hoạt động khi xảy ra lỗi mạng hoặc lỗi blockchain.
+\item Giao dịch thất bại phải được phát hiện và thông báo rõ ràng cho người dùng.
+\item Không làm mất thông tin cấu hình guardian hoặc dữ liệu Social Recovery.
+\end{itemize}
+
+\subsection{Khả năng sử dụng (Usability)}
+
+\begin{itemize}
+\item Người dùng tạo và sử dụng ví riêng tư mà không cần hiểu sâu các cơ chế mật mã học bên dưới.
+\item Giao diện trực quan, dễ thao tác, hỗ trợ đầy đủ các chức năng chính.
+\item Cung cấp thông báo và hướng dẫn rõ ràng khi gửi tài sản hoặc khôi phục tài khoản.
+\item Quy trình Social Recovery được thiết kế đơn giản nhằm giảm nguy cơ thao tác sai.
+\end{itemize}
+
+\subsection{Khả năng bảo trì (Maintainability)}
+
+\begin{itemize}
+\item Smart Contract, giao diện người dùng và dịch vụ backend được tách biệt rõ ràng.
+\item Mã nguồn được tổ chức theo cấu trúc dễ bảo trì, dễ mở rộng.
+\item Hỗ trợ cập nhật hoặc thay thế các thành phần mật mã học khi xuất hiện tiêu chuẩn mới.
+\end{itemize}
+
+\end{document}

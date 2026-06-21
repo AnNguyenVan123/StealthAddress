@@ -1,0 +1,18 @@
+@startuml
+left to right direction
+actor "Người nhận (Bob)" as Receiver
+
+package "Quét Tài sản Stealth" {
+  usecase "Truy vấn Sự kiện Announcement" as UC1
+  usecase "Tính Shared Secret (View Key)" as UC2
+  usecase "Tính Stealth Address kỳ vọng" as UC3
+  usecase "So sánh Khớp" as UC4
+  usecase "Lưu Trữ Tài khoản" as UC5
+}
+
+Receiver --> UC1
+Receiver --> UC2
+Receiver --> UC3
+Receiver --> UC4
+UC4 .> UC5 : <<include>>
+@enduml

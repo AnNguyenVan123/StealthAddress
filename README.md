@@ -55,6 +55,12 @@ DATN-20252/
 - Users can register a `.eth` name on **Sepolia ENS** and bind their stealth meta-address fields (`scanPub`, `spendPub`, `indexHash`) as resolver records.
 - This makes stealth addresses human-readable and discoverable.
 
+## 🌐 Live Deployment
+
+Trải nghiệm trực tiếp ứng dụng đã được deploy trên Google Cloud Run:
+- **Frontend DApp**: [https://stealth-wallet-frontend-628556539903.asia-southeast1.run.app](https://stealth-wallet-frontend-628556539903.asia-southeast1.run.app)
+- **Backend Relayer**: [https://stealth-wallet-backend-xo5emoezea-as.a.run.app](https://stealth-wallet-backend-xo5emoezea-as.a.run.app)
+
 ---
 
 ## 📦 Prerequisites
@@ -319,6 +325,36 @@ Then open **http://localhost:5173** in your browser and connect MetaMask to the 
 
 ---
 
+## 📖 Hướng Dẫn Sử Dụng (User Guide)
+
+Dưới đây là các bước cơ bản để trải nghiệm toàn bộ tính năng của Stealth Wallet:
+
+### 1. Khởi tạo & Đăng nhập (Dashboard)
+- Truy cập vào ứng dụng, bạn sẽ được yêu cầu **Khởi tạo ví mới (Create)** hoặc **Nhập ví có sẵn (Import)** bằng chuỗi khóa bảo mật (`stealth_meta`).
+- Khi khởi tạo thành công, bạn có thể xem địa chỉ Meta-Address của mình (gồm Scan Key và Spend Key).
+- Tại tab Dashboard, bạn có thể **Scan** (quét) blockchain để tìm các khoản tiền ẩn danh được gửi đến cho bạn.
+
+### 2. Gửi tiền ẩn danh (Transfer / Send)
+- Chuyển sang tab **Transfer**.
+- Bạn có thể chuyển tiền từ ví MetaMask công khai của mình (hoặc từ các tài khoản Stealth đã có tiền) đến một địa chỉ Stealth Meta-Address khác.
+- Hỗ trợ điền tự động khóa công khai thông qua **ENS Domain** (ví dụ nhập `alice.eth`, hệ thống sẽ tự động phân giải ra các khóa ẩn danh tương ứng).
+- Nhập số lượng ETH, ERC-20 hoặc ERC-721 và nhấn "Send". Một tài khoản Smart Account (Stealth Account) sẽ được tạo ngầm để nhận tiền.
+
+### 3. Đăng ký Tên Miền ENS (ENS Domain)
+- Để người khác dễ dàng chuyển tiền ẩn danh cho bạn mà không cần copy nguyên chuỗi khóa dài, hãy sang tab **ENS Domain**.
+- Thực hiện 2 bước bắt buộc: **Commit** (chờ 60 giây) $\to$ **Register**.
+- Sau khi đăng ký thành công, hệ thống tự động lưu các khóa ẩn danh của bạn vào Resolver Records của tên miền đó.
+
+### 4. Thiết lập Bảo mật (Security / Recovery)
+- Tại tab **Security**, bạn có thể thiết lập tính năng **Social Recovery** (Khôi phục xã hội).
+- Chỉ định danh sách các "Người giám hộ" (Guardians) và số lượng phiếu cần thiết (Threshold) để khôi phục lại quyền kiểm soát nếu bạn làm mất khóa.
+
+### 5. Xem Lịch sử và Cài đặt
+- **Activity**: Xem lại lịch sử các giao dịch gửi tiền ẩn danh đã được thực hiện (dữ liệu này được lưu cục bộ trên trình duyệt để đảm bảo tính riêng tư).
+- **Settings**: Sao lưu đoạn mã khóa bí mật (`stealth_meta`), xem thông tin kết nối mạng, hoặc Xóa ví (Wipe Wallet) khi không sử dụng nữa.
+
+---
+
 ## 🗺️ System Flow Diagram
 
 ```
@@ -353,13 +389,13 @@ Recipient                     │                              │              
 
 | Contract | Address |
 |---|---|
-| StealthAccountFactory | `0xb98c99ed8e324338567ef48782338a3742ad6800` |
-| ERC5564Announcer | `0x37734fddf3d4953894141fcaa35e1c6197a0783b` |
-| OmniPaymaster | `0x56022bc69a7cb5dfcbc96116dc6c57fa33affaf3` |
-| Groth16Verifier | `0x3d355b6da1c866b1807f2c4122b7e104bca5c1e7` |
-| SMTVerifier | `0xe686516193bb2600bb8268f4a95179d7ff67139c` |
-| PoseidonHasher | `0xd2a95e1105682f96bfcdbcdcc04a2d24ad23f5e8` |
-| MerkleTreeManager | `0x0b9852c2c9a0e59b8f67eb5ebc377717f2756a19` |
+| StealthAccountFactory | `0xdf140428e34ac54423f1ad707eec130986b38e39` |
+| ERC5564Announcer | `0x56d8a2e85c1cf4e19b400aef907caf3cbe5ca95f` |
+| OmniPaymaster | `0x858c7037b66b935900289b4be316cd9a9fcd22f6` |
+| StealthSpendVerifier | `0x3910ed3a56f1e1b211a42e3963d1797754ebcd3c` |
+| SMTVerifier | `0x8eabb1a8aeadd707a6170d585975b6754032fdeb` |
+| PoseidonHasher | `0xad68687560d6f88251219b1840b686aa6fc6a3b3` |
+| MerkleTreeManager | `0x905902c5442273421bf4ed1f68b9aede9201c6d1` |
 
 ---
 

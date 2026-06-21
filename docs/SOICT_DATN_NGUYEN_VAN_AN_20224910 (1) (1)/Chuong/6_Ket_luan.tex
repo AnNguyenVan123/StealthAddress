@@ -1,0 +1,44 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\section{Kết luận}
+
+Đồ án đã nghiên cứu và xây dựng một mô hình giao dịch riêng tư trên nền tảng Ethereum bằng cách kết hợp giữa cơ chế \textit{Stealth Address}, \textit{Account Abstraction} theo tiêu chuẩn ERC-4337 và \textit{Zero-Knowledge Proof}. Mục tiêu chính của hệ thống là nâng cao tính riêng tư cho người dùng trong quá trình nhận, quản lý và sử dụng tài sản số, đồng thời cải thiện khả năng sử dụng của ví ẩn danh trong các tình huống thực tế.
+
+So với các giải pháp hiện có như Umbra Cash hay Tornado Cash, hệ thống đề xuất không tập trung vào cơ chế trộn tài sản mà hướng đến việc giảm khả năng liên kết giữa địa chỉ ví gốc và địa chỉ nhận thông qua cơ chế Stealth Address. Bên cạnh đó, việc tích hợp Account Abstraction và Paymaster giúp giải quyết hạn chế về phí gas đối với các địa chỉ Stealth mới tạo, từ đó cải thiện khả năng sử dụng thực tế của mô hình.
+
+Trong quá trình thực hiện, đồ án đã hoàn thành các nội dung chính sau:
+\begin{itemize}
+    \item Xây dựng cơ chế tạo và quét \textit{Stealth Address} dựa trên trao đổi khóa ECDH.
+    \item Thiết kế mô hình \textit{Smart Account} sử dụng chuẩn ERC-4337 để hỗ trợ thanh toán phí gas thông qua Paymaster.
+    \item Ứng dụng \textit{Sparse Merkle Tree} và \textit{Zero-Knowledge Proof} để xác minh quyền sở hữu tài khoản và hỗ trợ cập nhật trạng thái với chi phí xác minh ổn định.
+    \item Xây dựng cơ chế \textit{Social Recovery} dựa trên \textit{Index Commitment}, cho phép phục hồi quyền kiểm soát tài khoản mà không cần cập nhật từng địa chỉ Stealth riêng lẻ.
+    \item Triển khai kiến trúc lai giữa On-chain và Off-chain nhằm giảm chi phí xử lý trên blockchain và nâng cao hiệu năng hệ thống.
+\end{itemize}
+
+Kết quả đạt được cho thấy hệ thống có thể thực hiện giao dịch riêng tư với khả năng mở rộng tốt hơn so với việc cập nhật trạng thái trực tiếp trên chuỗi. Đồng thời, việc tách riêng phần tính toán bằng chứng sang Off-chain giúp giảm tải cho blockchain mà vẫn duy trì được khả năng xác minh trên chuỗi.
+
+Tuy nhiên, đồ án vẫn còn một số hạn chế nhất định. Việc sinh bằng chứng ZK vẫn phụ thuộc vào máy chủ Off-chain nên chưa đạt được mức phi tập trung hoàn toàn. Ngoài ra, hệ thống mới dừng ở mức thử nghiệm chức năng trên môi trường testnet, chưa đánh giá đầy đủ hiệu năng trong điều kiện tải lớn hoặc trên môi trường triển khai thực tế.
+
+Thông qua quá trình thực hiện đồ án, em đã tích lũy thêm kiến thức và kinh nghiệm trong việc thiết kế hệ thống blockchain, xây dựng Smart Contract, ứng dụng Zero-Knowledge Proof và tích hợp các thành phần của Account Abstraction. Đây là nền tảng quan trọng cho việc tiếp tục nghiên cứu và phát triển các hệ thống bảo mật quyền riêng tư trên blockchain trong tương lai.
+
+\section{Hướng phát triển}
+
+Trong tương lai, hệ thống có thể được tiếp tục hoàn thiện theo một số hướng sau:
+
+\begin{itemize}
+    \item Tối ưu hóa quá trình sinh bằng chứng Zero-Knowledge nhằm giảm thời gian xử lý và giảm phụ thuộc vào máy chủ Off-chain.
+    
+    \item Mở rộng cơ chế \textit{Social Recovery} theo hướng linh hoạt hơn, cho phép thiết lập nhiều chính sách xác thực khác nhau giữa các guardian.
+    
+    \item Tích hợp thêm cơ chế thanh toán phí gas bằng nhiều loại token khác nhau nhằm nâng cao khả năng tương thích và cải thiện trải nghiệm người dùng.
+    
+    \item Hoàn thiện cơ chế đồng bộ trạng thái giữa Off-chain và On-chain để tăng tính ổn định khi xử lý đồng thời nhiều yêu cầu cập nhật.
+    
+    \item Triển khai thử nghiệm trên các mạng blockchain tương thích EVM khác hoặc môi trường thực tế để đánh giá hiệu năng, chi phí vận hành và mức độ phù hợp của hệ thống trong các ứng dụng thanh toán riêng tư.
+    
+    \item Nghiên cứu hướng phi tập trung hóa thành phần sinh bằng chứng và quản lý Merkle Tree nhằm giảm sự phụ thuộc vào máy chủ trung gian, tiến tới mô hình bảo mật phân tán hoàn chỉnh hơn.
+    \item Nghiên cứu tích hợp hệ thống với các ứng dụng phi tập trung (dApps) và giao thức tài chính phi tập trung (DeFi), cho phép người dùng sử dụng Stealth Address trong các hoạt động như chuyển tài sản, cung cấp thanh khoản, vay thế chấp và giao dịch phi tập trung mà vẫn duy trì tính riêng tư.
+\end{itemize}
+
+\end{document}

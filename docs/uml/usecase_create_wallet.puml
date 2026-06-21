@@ -1,0 +1,19 @@
+@startuml
+left to right direction
+actor "Người dùng" as User
+
+package "Hệ thống Stealth Wallet" {
+  usecase "Tạo Khóa Bí Mật" as UC1
+  usecase "Tính toán Lá Merkle" as UC2
+  usecase "Đăng ký Lá" as UC3
+  usecase "Cập nhật Cây Merkle" as UC4
+  usecase "Đồng bộ On-chain" as UC5
+}
+
+User --> UC1
+User --> UC2
+User --> UC3
+
+UC3 .> UC4 : <<include>>
+UC4 .> UC5 : <<include>>
+@enduml

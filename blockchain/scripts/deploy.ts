@@ -44,7 +44,8 @@ async function main() {
     account,
   });
 
-  const poseidonReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
+  const poseidonReceipt = await publicClient.waitForTransactionReceipt({
+    timeout: 600000,
     hash: poseidonHash,
   });
 
@@ -64,7 +65,8 @@ async function main() {
     account,
   });
 
-  const smtVerifierReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
+  const smtVerifierReceipt = await publicClient.waitForTransactionReceipt({
+    timeout: 600000,
     hash: smtVerifierHash,
   });
 
@@ -85,7 +87,8 @@ async function main() {
     account,
   });
 
-  const imtReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
+  const imtReceipt = await publicClient.waitForTransactionReceipt({
+    timeout: 600000,
     hash: imtHash,
   });
 
@@ -130,7 +133,8 @@ async function main() {
     account,
   });
 
-  const verifierReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
+  const verifierReceipt = await publicClient.waitForTransactionReceipt({
+    timeout: 600000,
     hash: verifierHash,
   });
 
@@ -153,7 +157,8 @@ async function main() {
     account,
   });
 
-  const factoryReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
+  const factoryReceipt = await publicClient.waitForTransactionReceipt({
+    timeout: 600000,
     hash: factoryHash,
   });
 
@@ -174,7 +179,8 @@ async function main() {
     account,
   });
 
-  const announcerReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
+  const announcerReceipt = await publicClient.waitForTransactionReceipt({
+    timeout: 600000,
     hash: announcerHash,
   });
 
@@ -186,7 +192,7 @@ async function main() {
   // =========================
   console.log("Deploying StealthPaymaster...");
   const entryPointAddress = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"; // Standard EntryPoint v0.6
-  
+
   const paymasterArtifact = await hre.artifacts.readArtifact("StealthPaymaster");
 
   const paymasterHash = await walletClient.deployContract({
@@ -196,7 +202,8 @@ async function main() {
     account,
   });
 
-  const paymasterReceipt = await publicClient.waitForTransactionReceipt({ timeout: 600000,
+  const paymasterReceipt = await publicClient.waitForTransactionReceipt({
+    timeout: 600000,
     hash: paymasterHash,
   });
 
@@ -205,17 +212,17 @@ async function main() {
 
   // Also deposit some ETH into the paymaster to sponsor transactions
   try {
-      const depositHash = await walletClient.writeContract({
-        address: paymasterAddress,
-        abi: paymasterArtifact.abi,
-        functionName: "deposit",
-        value: 1000000000000000n, // 0.001 ETH
-        account,
-      });
-      await publicClient.waitForTransactionReceipt({ timeout: 600000, hash: depositHash });
-      console.log("Deposited 0.001 ETH to paymaster");
+    const depositHash = await walletClient.writeContract({
+      address: paymasterAddress,
+      abi: paymasterArtifact.abi,
+      functionName: "deposit",
+      value: 1000000000000000n, // 0.001 ETH
+      account,
+    });
+    await publicClient.waitForTransactionReceipt({ timeout: 600000, hash: depositHash });
+    console.log("Deposited 0.001 ETH to paymaster");
   } catch (e) {
-      console.log("Failed to deposit to paymaster:", e);
+    console.log("Failed to deposit to paymaster:", e);
   }
 
   // =========================

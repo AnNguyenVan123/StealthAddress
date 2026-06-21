@@ -1,0 +1,32 @@
+@startuml
+class SenderClient <<Client>> {
+  + receiverMetaAddress: MetaAddress
+  + computeSharedSecret()
+  + computeStealthAddress()
+  + requestSpendProof()
+}
+
+class RelayerServer <<Server>> {
+  + generateSpendProof(spendPriv, secret, index)
+  + buildUserOperation()
+  + sendTransaction()
+}
+
+class EntryPoint <<Smart Contract>> {
+  + handleOps(ops, beneficiary)
+}
+
+class StealthAccount <<Smart Contract>> {
+  + validateUserOp()
+  + executeStealthTransfer()
+}
+
+class ERC5564Announcer <<Smart Contract>> {
+  + emitAnnouncement()
+}
+
+SenderClient "1" --> "1" RelayerServer : Ủy quyền ký ZK
+RelayerServer "1" --> "1" EntryPoint : Gửi handleOps
+EntryPoint "1" --> "1" StealthAccount : Gọi validateUserOp & execute
+StealthAccount "1" --> "1" ERC5564Announcer : Phát sự kiện ERC-5564
+@enduml

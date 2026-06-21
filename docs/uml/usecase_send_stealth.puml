@@ -1,0 +1,20 @@
+@startuml
+left to right direction
+actor "Người gửi (Alice)" as Sender
+
+package "Gửi Tài sản Stealth" {
+  usecase "Tra cứu Meta-address" as UC1
+  usecase "Tính Shared Secret" as UC2
+  usecase "Tính Stealth Address" as UC3
+  usecase "Tạo Bằng chứng ZK" as UC4
+  usecase "Gửi UserOperation" as UC5
+  usecase "Xác thực ZK On-chain" as UC6
+}
+
+Sender --> UC1
+Sender --> UC2
+Sender --> UC3
+Sender --> UC4
+UC4 .> UC5 : <<include>>
+UC5 .> UC6 : <<include>>
+@enduml
